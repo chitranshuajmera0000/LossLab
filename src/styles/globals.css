@@ -1,0 +1,42 @@
+.dotted-bg {
+	background-image: radial-gradient(circle, #0f1223 1px, transparent 1px);
+	background-size: 24px 24px;
+}
+
+/* Card hover polish for bg2/bg3 cards */
+.bg2, .bg3 {
+	transition: border-color 0.15s;
+}
+.bg2:hover, .bg3:hover {
+	border-color: var(--text2);
+}
+
+/* Shimmer animation for skeletons */
+.animate-shimmer {
+	background-size: 200% 100%;
+	animation: shimmer 1.5s linear infinite;
+}
+@keyframes shimmer {
+	0% { background-position: -200% 0; }
+	100% { background-position: 200% 0; }
+}
+.screen-shell {
+	min-height: 100vh;
+	display: flex;
+	align-items: center;
+	justify-content: center;
+	font-size: clamp(1.5rem, 2.5vw, 2.25rem);
+	font-weight: 700;
+	color: var(--text0);
+}
+
+/* Shake animation for locked param controls */
+.animate-shake {
+  animation: shake-x 0.3s cubic-bezier(.36,.07,.19,.97) both;
+}
+@keyframes shake-x {
+  10%, 90% { transform: translateX(-5px); }
+  20%, 80% { transform: translateX(5px); }
+  30%, 50%, 70% { transform: translateX(-5px); }
+  40%, 60% { transform: translateX(5px); }
+}

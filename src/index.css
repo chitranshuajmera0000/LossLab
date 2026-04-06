@@ -1,0 +1,63 @@
+@import url('https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;700&family=Syne:wght@400;500;600;700;800&display=swap');
+@import './styles/globals.css';
+
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  --bg0: #030407;
+  --bg1: #090b14;
+  --bg2: #101426;
+  --bg3: #181f3d;
+  --bg4: #212c59;
+  --border: rgba(255, 255, 255, 0.08);
+  --border2: rgba(255, 255, 255, 0.15);
+  --text0: #f8fafc;
+  --text1: #cbd5e1;
+  --text2: #64748b;
+  --accent: #22d3ee;
+  --accent2: #a855f7;
+  --green: #10b981;
+  --amber: #f59e0b;
+  --red: #f43f5e;
+  --pink: #ec4899;
+}
+
+* {
+  box-sizing: border-box;
+  scrollbar-width: thin;
+  scrollbar-color: var(--border2) var(--bg2);
+}
+
+html,
+body,
+#root {
+  min-height: 100%;
+  margin: 0;
+}
+
+body {
+  background: #060810;
+  color: #e8eaf6;
+  font-family: 'Syne', sans-serif;
+}
+
+code,
+pre {
+  font-family: 'JetBrains Mono', monospace;
+}
+
+::-webkit-scrollbar {
+  width: 4px;
+  height: 4px;
+}
+
+::-webkit-scrollbar-track {
+  background: var(--bg2);
+}
+
+::-webkit-scrollbar-thumb {
+  background: var(--border2);
+  border-radius: 999px;
+}
