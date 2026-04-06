@@ -115,59 +115,90 @@ function AdminScreen() {
 
         fetchAll()
 
+        let pollId
+        if (isAuth) {
+            pollId = setInterval(() => {
+                if (!active) return
+                fetchAll()
+            }, 12_000)
+        }
+
         if (isAuth) {
             const channel = supabase.channel('admin:all-team-sessions')
 
+            // Supabase Realtime uses payload.eventType ('INSERT' | 'UPDATE' | 'DELETE'), not payload.event
+            const ev = (p) => p.eventType || p.event
+
             channel.on('postgres_changes', { event: '*', schema: 'public', table: 'sessions' }, (payload) => {
+                const type = ev(payload)
                 const nextCode =
                     payload?.new?.session_code ||
                     payload?.old?.session_code ||
                     payload?.new?.code ||
                     payload?.old?.code
                 if (!monitoredSessions.has(nextCode)) return
-                if (payload.event === 'INSERT') {
+                if (type === 'INSERT') {
                     setSessions((prev) => [...prev, payload.new])
-                } else if (payload.event === 'UPDATE') {
+                } else if (type === 'UPDATE') {
                     setSessions((prev) => prev.map((s) => (s.id === payload.new.id ? payload.new : s)))
+                } else if (type === 'DELETE' && payload.old?.id) {
+                    setSessions((prev) => prev.filter((s) => s.id !== payload.old.id))
                 }
             })
 
             channel.on('postgres_changes', { event: '*', schema: 'public', table: 'teams' }, (payload) => {
+                const type = ev(payload)
                 const nextSessionCode = payload?.new?.session_code || payload?.old?.session_code
                 if (!monitoredSessions.has(nextSessionCode)) return
-                if (payload.event === 'INSERT') {
+                if (type === 'INSERT') {
                     setTeams((prev) => [...prev, payload.new])
-                } else if (payload.event === 'UPDATE') {
+                } else if (type === 'UPDATE') {
                     setTeams((prev) => prev.map((t) => (t.id === payload.new.id ? payload.new : t)))
+                } else if (type === 'DELETE' && payload.old?.id) {
+                    setTeams((prev) => prev.filter((t) => t.id !== payload.old.id))
                 }
             })
 
             channel.on('postgres_changes', { event: '*', schema: 'public', table: 'runs' }, (payload) => {
+                const type = ev(payload)
                 const nextSessionCode = payload?.new?.session_code || payload?.old?.session_code
                 if (!monitoredSessions.has(nextSessionCode)) return
-                if (payload.event === 'INSERT') {
-                    setRuns((prev) => [...prev, payload.new])
-                } else if (payload.event === 'UPDATE') {
+                if (type === 'INSERT') {
+                    setRuns((prev) =>
+                        [...prev, payload.new].sort((a, b) => (a.run_number || 0) - (b.run_number || 0)),
+                    )
+                } else if (type === 'UPDATE') {
                     setRuns((prev) => prev.map((r) => (r.id === payload.new.id ? payload.new : r)))
+                } else if (type === 'DELETE' && payload.old?.id) {
+                    setRuns((prev) => prev.filter((r) => r.id !== payload.old.id))
                 }
             })
 
             channel.on('postgres_changes', { event: '*', schema: 'public', table: 'presentations' }, (payload) => {
+                const type = ev(payload)
                 const nextSessionCode = payload?.new?.session_code || payload?.old?.session_code
                 if (!monitoredSessions.has(nextSessionCode)) return
-                if (payload.event === 'INSERT') {
+                if (type === 'INSERT') {
                     setPresentations((prev) => [...prev, payload.new])
-                } else if (payload.event === 'UPDATE') {
+                } else if (type === 'UPDATE') {
                     setPresentations((prev) => prev.map((p) => (p.id === payload.new.id ? payload.new : p)))
+                } else if (type === 'DELETE' && payload.old?.id) {
+                    setPresentations((prev) => prev.filter((p) => p.id !== payload.old.id))
                 }
             })
 
-            channel.subscribe()
+            channel.subscribe((status) => {
+                if (import.meta.env.DEV && status !== 'SUBSCRIBED') {
+                    // eslint-disable-next-line no-console
+                    console.warn('[Admin realtime]', status)
+                }
+            })
             channelRef.current = channel
         }
 
         return () => {
             active = false
+            if (pollId) clearInterval(pollId)
             if (channelRef.current) {
                 supabase.removeChannel(channelRef.current)
             }
