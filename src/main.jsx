@@ -5,6 +5,9 @@ import { Toaster } from 'react-hot-toast'
 import './index.css'
 import App from './App.jsx'
 import { SessionProvider } from './context/SessionContext'
+import { initDisplayScaleCompensation } from './utils/displayScaleCompensation.js'
+
+initDisplayScaleCompensation()
 
 createRoot(document.getElementById('root')).render(
   <StrictMode>
