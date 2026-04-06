@@ -21,7 +21,7 @@ export function applyDisplayScaleCompensation() {
 
   if (localStorage.getItem(STORAGE_DISABLE) === '1') {
     root.style.zoom = ''
-    root.removeAttribute('data-losslab-display-scale')
+    delete root.dataset.losslabDisplayScale
     return
   }
 
@@ -29,7 +29,7 @@ export function applyDisplayScaleCompensation() {
   const isWindows = /Windows/i.test(ua)
   if (!isWindows) {
     root.style.zoom = ''
-    root.removeAttribute('data-losslab-display-scale')
+    delete root.dataset.losslabDisplayScale
     return
   }
 
@@ -46,7 +46,7 @@ export function applyDisplayScaleCompensation() {
     root.dataset.losslabDisplayScale = zoom
   } else {
     root.style.zoom = ''
-    root.removeAttribute('data-losslab-display-scale')
+    delete root.dataset.losslabDisplayScale
   }
 }
 
