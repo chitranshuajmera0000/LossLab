@@ -67,6 +67,8 @@ function AdminScreen() {
     const [runs, setRuns] = useState([])
     const [presentations, setPresentations] = useState([])
     const [sessions, setSessions] = useState([])
+    const [syncStatus, setSyncStatus] = useState('connecting')
+    const [lastSyncAt, setLastSyncAt] = useState(null)
 
     const channelRef = useRef(null)
 
@@ -97,20 +99,25 @@ function AdminScreen() {
 
         async function fetchAll() {
             if (!isAuth) return
+            try {
+                const [sessionsRes, teamsRes, runsRes, presRes] = await Promise.all([
+                    supabase.from('sessions').select('*').in('session_code', TEAM_CODES),
+                    supabase.from('teams').select('*').in('session_code', TEAM_CODES),
+                    supabase.from('runs').select('*').in('session_code', TEAM_CODES).order('run_number', { ascending: true }),
+                    supabase.from('presentations').select('*').in('session_code', TEAM_CODES),
+                ])
 
-            const [sessionsRes, teamsRes, runsRes, presRes] = await Promise.all([
-                supabase.from('sessions').select('*').in('session_code', TEAM_CODES),
-                supabase.from('teams').select('*').in('session_code', TEAM_CODES),
-                supabase.from('runs').select('*').in('session_code', TEAM_CODES).order('run_number', { ascending: true }),
-                supabase.from('presentations').select('*').in('session_code', TEAM_CODES),
-            ])
+                if (!active) return
 
-            if (!active) return
-
-            setSessions(sessionsRes.data || [])
-            setTeams(teamsRes.data || [])
-            setRuns(runsRes.data || [])
-            setPresentations(presRes.data || [])
+                setSessions(sessionsRes.data || [])
+                setTeams(teamsRes.data || [])
+                setRuns(runsRes.data || [])
+                setPresentations(presRes.data || [])
+                setLastSyncAt(new Date())
+            } catch {
+                if (!active) return
+                setSyncStatus('polling')
+            }
         }
 
         fetchAll()
@@ -188,6 +195,15 @@ function AdminScreen() {
             })
 
             channel.subscribe((status) => {
+                if (status === 'SUBSCRIBED') {
+                    setSyncStatus('live')
+                    return
+                }
+                if (status === 'CHANNEL_ERROR' || status === 'TIMED_OUT' || status === 'CLOSED') {
+                    setSyncStatus('polling')
+                } else if (status === 'CONNECTING') {
+                    setSyncStatus('connecting')
+                }
                 if (import.meta.env.DEV && status !== 'SUBSCRIBED') {
                     // eslint-disable-next-line no-console
                     console.warn('[Admin realtime]', status)
@@ -215,7 +231,18 @@ function AdminScreen() {
     }, [sessions])
 
     const gridData = useMemo(() => {
-        return teams
+        const canonicalTeams = Object.values(
+            teams.reduce((acc, team) => {
+                const key = team.session_code || `team:${team.id}`
+                const prev = acc[key]
+                if (!prev || (team.run_count || 0) > (prev.run_count || 0)) {
+                    acc[key] = team
+                }
+                return acc
+            }, {}),
+        )
+
+        return canonicalTeams
             .map((team) => {
                 const teamRuns = runs.filter((r) => r.team_id === team.id)
                 const pres = presentations.find((p) => p.team_id === team.id)
@@ -287,7 +314,7 @@ function AdminScreen() {
 
                 return {
                     id: team.id,
-                    name: team.team_name,
+                    name: team.session_code || team.team_name,
                     sessionCode: team.session_code,
                     runsUsed: teamRuns.length,
                     highestScore,
@@ -366,13 +393,13 @@ function AdminScreen() {
         return {
             monitoredSessions: TEAM_CODES.length,
             missionCatalog: MISSIONS.length,
-            activeTeams: teams.length,
+            activeTeams: gridData.length,
             totalRuns: runs.length,
             readyTeams: readyCount,
             missionWinners,
             avgScoreAll,
         }
-    }, [teams.length, runs.length, gridData])
+    }, [runs.length, gridData])
 
     if (!isAuth) {
         return (
@@ -430,6 +457,22 @@ function AdminScreen() {
                     </div>
                 </div>
                 <div className="flex items-center gap-6">
+                    <div className="flex items-center gap-4">
+                        <div
+                            className={`rounded-full border px-2.5 py-1 text-[10px] font-mono uppercase tracking-wider ${
+                                syncStatus === 'live'
+                                    ? 'border-green/40 text-green bg-green/10'
+                                    : syncStatus === 'polling'
+                                      ? 'border-amber/40 text-amber bg-amber/10'
+                                      : 'border-white/15 text-text2 bg-white/5'
+                            }`}
+                        >
+                            {syncStatus === 'live' ? 'Live' : syncStatus === 'polling' ? 'Polling' : 'Connecting'}
+                        </div>
+                        <div className="text-[10px] font-mono text-text2">
+                            Last sync: {lastSyncAt ? lastSyncAt.toLocaleTimeString() : '—'}
+                        </div>
+                    </div>
                     <div className="flex gap-5 text-xs font-mono">
                         <div className="flex flex-col items-end">
                             <span className="text-text2 text-[10px] uppercase">Teams</span>
@@ -468,25 +511,36 @@ function AdminScreen() {
                     ))}
                 </div>
 
-                {/* Mission / session command center */}
                 <div className="mb-4 flex items-end justify-between gap-4 flex-wrap">
                     <div>
-                        <h2 className="font-['Syne'] text-lg font-bold text-white tracking-tight">Mission command center</h2>
+                        <h2 className="font-['Syne'] text-lg font-bold text-white tracking-tight">Session roster</h2>
                         <p className="text-xs text-text2 mt-1 max-w-2xl">
-                            Each card is a fixed room code (TEAM01 → mission 1, … TEAM05 → mission 5). Briefs follow that order,
-                            not the database <span className="font-mono text-text1">mission_id</span>, so pre-seeded sessions stay correct.
+                            One card per session code with mission brief, run budget, and live team status all in one place.
                         </p>
                     </div>
                 </div>
 
-                <div className="grid grid-cols-1 lg:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-5 gap-4 mb-10">
+                <div className="grid grid-cols-1 lg:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-5 gap-5">
                     {sessionSummaries.map((s) => {
+                        const team = gridData.find((t) => t.sessionCode === s.code) || null
                         const runPressure = s.capacityRuns > 0 ? Math.min(100, Math.round((s.totalRuns / s.capacityRuns) * 100)) : 0
                         const readyPct = s.teamCount > 0 ? Math.round((s.readyTeams / s.teamCount) * 100) : 0
+                        const cfg = team?.bestRunPayload?.run?.config
+                        const flags = [
+                            team?.bestRunPayload?.resultObj?.diverged && 'Diverged',
+                            team?.bestRunPayload?.resultObj?.vanished && 'Vanished',
+                            team?.bestRunPayload?.resultObj?.flatlined && 'Flatlined',
+                            team?.bestRunPayload?.resultObj?.overfit && 'Overfit',
+                        ].filter(Boolean)
+
                         return (
                             <article
                                 key={s.code}
-                                className="group rounded-2xl border border-white/10 bg-bg1/70 backdrop-blur-xl overflow-hidden flex flex-col shadow-lg shadow-black/25 hover:border-accent/30 transition-colors"
+                                className={`rounded-2xl border ${
+                                    team?.isReady
+                                        ? 'border-green/45 bg-gradient-to-b from-green/10 to-bg1/80'
+                                        : 'border-white/10 bg-bg1/70'
+                                } backdrop-blur-xl overflow-hidden flex flex-col shadow-lg shadow-black/25`}
                             >
                                 <div className="px-4 pt-4 pb-3 border-b border-white/5 bg-gradient-to-r from-accent/10 via-transparent to-accent2/10">
                                     <div className="flex items-start justify-between gap-2">
@@ -507,22 +561,9 @@ function AdminScreen() {
                                         </div>
                                     </div>
                                     <p className="text-[11px] text-text1 mt-2 line-clamp-2 italic">&ldquo;{s.subtitle}&rdquo;</p>
-                                    {s.dbSession?.instructor_name ? (
-                                        <p className="text-[10px] text-text2 mt-1.5 font-mono">
-                                            Host: {s.dbSession.instructor_name}
-                                            {typeof s.dbSession.is_active === 'boolean'
-                                                ? s.dbSession.is_active
-                                                    ? ' · active'
-                                                    : ' · inactive'
-                                                : ''}
-                                        </p>
-                                    ) : null}
                                 </div>
+
                                 <div className="p-4 flex-1 flex flex-col gap-3 text-[11px]">
-                                    <div>
-                                        <div className="text-[9px] uppercase tracking-wider text-text2 font-bold mb-1">Dataset</div>
-                                        <p className="text-text1 leading-relaxed line-clamp-3">{s.dataset}</p>
-                                    </div>
                                     <div className="grid grid-cols-2 gap-2">
                                         <div className="rounded-lg bg-bg0/60 border border-white/5 p-2">
                                             <div className="text-[9px] text-text2 uppercase">Win</div>
@@ -532,10 +573,6 @@ function AdminScreen() {
                                             <div className="text-[9px] text-text2 uppercase">Stretch</div>
                                             <p className="text-text1 text-[10px] leading-snug mt-0.5 line-clamp-3">{s.stretchGoal}</p>
                                         </div>
-                                    </div>
-                                    <div>
-                                        <div className="text-[9px] uppercase text-text2 font-bold mb-1">Concept</div>
-                                        <p className="text-text1 text-[10px] leading-relaxed">{s.concept}</p>
                                     </div>
 
                                     <div className="space-y-2 pt-1 border-t border-white/5">
@@ -553,317 +590,133 @@ function AdminScreen() {
                                             </span>
                                         </div>
                                         <MeterBar value={s.readyTeams} max={Math.max(1, s.teamCount)} tone="green" />
-                                        <div className="flex flex-wrap gap-2 text-[10px] font-mono">
-                                            <span className="text-text2">
-                                                Avg score <span className="text-pink">{s.avgScore}</span>
-                                            </span>
-                                            <span className="text-text2">
-                                                Peak <span className="text-white">{s.topScore}</span>
-                                            </span>
-                                            <span className="text-text2">
-                                                Win met <span className="text-green">{s.wonCount}</span>
-                                            </span>
-                                            <span className="text-text2">
-                                                Stretch <span className="text-accent">{s.stretchCount}</span>
-                                            </span>
-                                        </div>
                                     </div>
+
+                                    {!team ? (
+                                        <div className="rounded-xl border border-dashed border-white/10 bg-bg1/40 px-4 py-6 text-center text-text2 text-sm">
+                                            No roster for <span className="font-mono text-text1">{s.code}</span> yet.
+                                        </div>
+                                    ) : (
+                                        <>
+                                            <div className="flex items-start justify-between gap-3 pt-1 border-t border-white/5">
+                                                <div className="min-w-0 flex-1">
+                                                    <h4 className="font-['Syne'] text-lg font-bold truncate">
+                                                        {team.sessionCode || team.name || 'Unknown Session'}
+                                                    </h4>
+                                                    <p className="text-[10px] uppercase tracking-widest text-text2 mt-1 font-mono">
+                                                        {team.isReady ? 'Submitted' : team.presentationDraft ? 'Draft' : 'Tuning'}
+                                                    </p>
+                                                </div>
+                                                <div className="font-mono text-right">
+                                                    <div className="text-[9px] uppercase text-text2">Score</div>
+                                                    <div className="text-xl font-bold text-pink leading-none">{team.highestScore}</div>
+                                                </div>
+                                            </div>
+
+                                            <div className="grid grid-cols-2 gap-3">
+                                                <div className="rounded-xl bg-bg0/50 border border-white/5 p-3">
+                                                    <div className="text-[9px] uppercase text-text2 font-bold mb-1">Accuracy</div>
+                                                    <div className="font-mono text-lg text-text1">{formatPct01(team.bestAccuracy)}</div>
+                                                </div>
+                                                <div className="rounded-xl bg-bg0/50 border border-white/5 p-3 text-right">
+                                                    <div className="text-[9px] uppercase text-text2 font-bold mb-1">Runs</div>
+                                                    <div className="font-mono text-lg text-text1">
+                                                        {team.runsUsed}
+                                                        <span className="text-text2 text-sm"> / {team.maxRuns === Infinity ? '∞' : team.maxRuns}</span>
+                                                    </div>
+                                                </div>
+                                            </div>
+
+                                            <div className="flex flex-wrap gap-2">
+                                                {team.missionWon && (
+                                                    <span className="text-[9px] font-bold uppercase px-2 py-1 rounded bg-green/20 text-green border border-green/35">
+                                                        Win ✓
+                                                    </span>
+                                                )}
+                                                {team.stretchWon && (
+                                                    <span className="text-[9px] font-bold uppercase px-2 py-1 rounded bg-accent/15 text-accent border border-accent/35">
+                                                        Stretch ✓
+                                                    </span>
+                                                )}
+                                                <span className="text-[9px] font-mono text-text2 border border-white/10 rounded px-2 py-1">
+                                                    Gap val−train: {team.gap != null ? team.gap.toFixed(3) : '—'}
+                                                </span>
+                                            </div>
+
+                                            <div>
+                                                <div className="text-[9px] uppercase text-text2 font-bold mb-1">Val loss (best run)</div>
+                                                <Sparkline data={team.lastRunValLoss} stroke="#34d399" />
+                                            </div>
+
+                                            {cfg && (
+                                                <div>
+                                                    <div className="text-[9px] uppercase text-text2 font-bold mb-2">Best-run hyperparameters</div>
+                                                    <div className="flex flex-wrap gap-1.5">
+                                                        {[
+                                                            ['lr', cfg.lr],
+                                                            ['opt', cfg.optimizer],
+                                                            ['bs', cfg.batchSize],
+                                                            ['epochs', cfg.epochs],
+                                                        ]
+                                                            .filter(([, v]) => v != null && v !== '')
+                                                            .map(([k, v]) => (
+                                                                <span
+                                                                    key={k}
+                                                                    className="text-[10px] font-mono bg-bg0/70 border border-white/10 px-2 py-0.5 rounded"
+                                                                >
+                                                                    {k}: <span className="text-accent">{String(v)}</span>
+                                                                </span>
+                                                            ))}
+                                                    </div>
+                                                </div>
+                                            )}
+
+                                            {flags.length > 0 && (
+                                                <div className="flex flex-wrap gap-1">
+                                                    {flags.map((f) => (
+                                                        <span
+                                                            key={f}
+                                                            className="text-[9px] uppercase font-bold bg-red/15 text-red border border-red/30 px-2 py-0.5 rounded"
+                                                        >
+                                                            {f}
+                                                        </span>
+                                                    ))}
+                                                </div>
+                                            )}
+
+                                            <div className="flex flex-wrap gap-2 mt-1">
+                                                <button
+                                                    type="button"
+                                                    onClick={() => {
+                                                        const url = `${window.location.origin}/project?team=${encodeURIComponent(team.id)}`
+                                                        window.open(url, '_blank', 'noopener,noreferrer')
+                                                    }}
+                                                    className="text-[10px] uppercase font-bold tracking-wider rounded-lg bg-accent/20 text-accent border border-accent/40 px-3 py-1.5 hover:bg-accent/30 transition"
+                                                >
+                                                    Open projector
+                                                </button>
+                                                <button
+                                                    type="button"
+                                                    onClick={async () => {
+                                                        const url = `${window.location.origin}/project?team=${encodeURIComponent(team.id)}`
+                                                        try {
+                                                            await navigator.clipboard.writeText(url)
+                                                        } catch {
+                                                            window.prompt('Copy projector URL:', url)
+                                                        }
+                                                    }}
+                                                    className="text-[10px] uppercase font-bold tracking-wider rounded-lg bg-white/5 text-text1 border border-white/10 px-3 py-1.5 hover:bg-white/10 transition"
+                                                >
+                                                    Copy projector link
+                                                </button>
+                                            </div>
+                                        </>
+                                    )}
                                 </div>
                             </article>
                         )
                     })}
                 </div>
-
-                {/* Teams by session */}
-                <h2 className="font-['Syne'] text-lg font-bold text-white mb-4 tracking-tight">Teams by session</h2>
-
-                {gridData.length === 0 ? (
-                    <div className="py-24 text-center text-text2 border border-dashed border-white/15 rounded-2xl bg-bg1/30">
-                        <p className="font-['Syne'] text-lg text-text1 mb-2">No teams have joined yet</p>
-                        <p className="text-sm max-w-md mx-auto">
-                            Waiting for crews to check in with codes{' '}
-                            <span className="font-mono text-accent">{rangeLabel}</span>.
-                        </p>
-                    </div>
-                ) : (
-                    <div className="flex flex-col gap-10">
-                        {TEAM_CODES.map((code) => {
-                            const missionObj = getMissionForLabSessionCode(code) ?? MISSIONS[0]
-                            const sessionTeams = gridData.filter((t) => t.sessionCode === code)
-
-                            return (
-                                <section key={code} className="scroll-mt-4">
-                                    <div className="flex flex-wrap items-center gap-3 mb-4 pb-3 border-b border-white/10">
-                                        <span className="font-mono text-sm font-bold text-white bg-white/10 px-3 py-1 rounded-lg">
-                                            {code}
-                                        </span>
-                                        <span className="text-text2">·</span>
-                                        <span className="font-['Syne'] font-semibold text-text1">{missionObj.title}</span>
-                                        <span className="text-[10px] uppercase text-text2 ml-auto font-mono">
-                                            {sessionTeams.length} team{sessionTeams.length !== 1 ? 's' : ''} ·{' '}
-                                            {sessionTeams.reduce((n, t) => n + t.runsUsed, 0)} runs
-                                        </span>
-                                    </div>
-
-                                    {sessionTeams.length === 0 ? (
-                                        <div className="rounded-xl border border-dashed border-white/10 bg-bg1/40 px-6 py-10 text-center text-text2 text-sm">
-                                            No roster for <span className="font-mono text-text1">{code}</span> yet — mission:{' '}
-                                            <span className="text-text1">{missionObj.title}</span>
-                                        </div>
-                                    ) : (
-                                        <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-5">
-                                            {sessionTeams.map((team) => {
-                                                const cfg = team.bestRunPayload?.run?.config
-                                                const flags = [
-                                                    team.bestRunPayload?.resultObj?.diverged && 'Diverged',
-                                                    team.bestRunPayload?.resultObj?.vanished && 'Vanished',
-                                                    team.bestRunPayload?.resultObj?.flatlined && 'Flatlined',
-                                                    team.bestRunPayload?.resultObj?.overfit && 'Overfit',
-                                                ].filter(Boolean)
-
-                                                return (
-                                                    <div
-                                                        key={team.id}
-                                                        className={`rounded-2xl border ${
-                                                            team.isReady
-                                                                ? 'border-green/45 bg-gradient-to-b from-green/10 to-bg1/80'
-                                                                : 'border-white/10 bg-bg1/65'
-                                                        } p-5 backdrop-blur-xl relative overflow-hidden flex flex-col gap-4 shadow-lg shadow-black/20`}
-                                                    >
-                                                        {team.isReady && (
-                                                            <div className="absolute top-0 left-0 right-0 h-1 bg-gradient-to-r from-green to-emerald-400" />
-                                                        )}
-
-                                                        <div className="flex items-start justify-between gap-3">
-                                                            <div className="min-w-0 flex-1">
-                                                                <h3 className="font-['Syne'] text-xl font-bold truncate">
-                                                                    {team.name || 'Unnamed Team'}
-                                                                </h3>
-                                                                <p className="text-[10px] uppercase tracking-widest text-text2 mt-1 font-mono">
-                                                                    {team.sessionCode} · {team.missionTitle}
-                                                                </p>
-                                                                <div className="flex flex-wrap gap-2 mt-3">
-                                                                    <button
-                                                                        type="button"
-                                                                        onClick={() => {
-                                                                            const url = `${window.location.origin}/project?team=${encodeURIComponent(team.id)}`
-                                                                            window.open(url, '_blank', 'noopener,noreferrer')
-                                                                        }}
-                                                                        className="text-[10px] uppercase font-bold tracking-wider rounded-lg bg-accent/20 text-accent border border-accent/40 px-3 py-1.5 hover:bg-accent/30 transition"
-                                                                    >
-                                                                        Open projector
-                                                                    </button>
-                                                                    <button
-                                                                        type="button"
-                                                                        onClick={async () => {
-                                                                            const url = `${window.location.origin}/project?team=${encodeURIComponent(team.id)}`
-                                                                            try {
-                                                                                await navigator.clipboard.writeText(url)
-                                                                            } catch {
-                                                                                window.prompt('Copy projector URL:', url)
-                                                                            }
-                                                                        }}
-                                                                        className="text-[10px] uppercase font-bold tracking-wider rounded-lg bg-white/5 text-text1 border border-white/10 px-3 py-1.5 hover:bg-white/10 transition"
-                                                                    >
-                                                                        Copy projector link
-                                                                    </button>
-                                                                </div>
-                                                            </div>
-                                                            <div className="flex flex-col items-end gap-1 shrink-0">
-                                                                {team.isPresenting && (
-                                                                    <span className="px-2 py-0.5 rounded text-[9px] uppercase font-bold bg-accent/20 text-accent border border-accent/40">
-                                                                        Live
-                                                                    </span>
-                                                                )}
-                                                                <span
-                                                                    className={`px-2 py-1 rounded text-[10px] uppercase font-bold tracking-wider ${
-                                                                        team.isReady
-                                                                            ? 'bg-green text-bg0'
-                                                                            : team.presentationDraft
-                                                                              ? 'bg-amber/20 text-amber border border-amber/40'
-                                                                              : 'bg-bg3 text-text2'
-                                                                    }`}
-                                                                >
-                                                                    {team.isReady
-                                                                        ? 'Submitted'
-                                                                        : team.presentationDraft
-                                                                          ? 'Draft'
-                                                                          : 'Tuning'}
-                                                                </span>
-                                                            </div>
-                                                        </div>
-
-                                                        <div className="grid grid-cols-2 gap-3">
-                                                            <div className="rounded-xl bg-bg0/50 border border-white/5 p-3">
-                                                                <div className="text-[9px] uppercase text-text2 font-bold mb-1">
-                                                                    Best score
-                                                                </div>
-                                                                <div className="font-mono text-3xl font-bold text-pink leading-none">
-                                                                    {team.highestScore}
-                                                                </div>
-                                                            </div>
-                                                            <div className="rounded-xl bg-bg0/50 border border-white/5 p-3 text-right">
-                                                                <div className="text-[9px] uppercase text-text2 font-bold mb-1">
-                                                                    Runs
-                                                                </div>
-                                                                <div className="font-mono text-2xl text-text1">
-                                                                    {team.runsUsed}
-                                                                    <span className="text-text2 text-sm">
-                                                                        {' '}
-                                                                        / {team.maxRuns === Infinity ? '∞' : team.maxRuns}
-                                                                    </span>
-                                                                </div>
-                                                            </div>
-                                                        </div>
-
-                                                        <div className="flex flex-wrap gap-2">
-                                                            {team.missionWon && (
-                                                                <span className="text-[9px] font-bold uppercase px-2 py-1 rounded bg-green/20 text-green border border-green/35">
-                                                                    Win ✓
-                                                                </span>
-                                                            )}
-                                                            {team.stretchWon && (
-                                                                <span className="text-[9px] font-bold uppercase px-2 py-1 rounded bg-accent/15 text-accent border border-accent/35">
-                                                                    Stretch ✓
-                                                                </span>
-                                                            )}
-                                                            {missionObj.explorationRequirement && (
-                                                                <span className="text-[9px] font-mono text-text2 border border-white/10 rounded px-2 py-1">
-                                                                    {missionObj.explorationRequirement.label}: {team.optimizersTried}/
-                                                                    {missionObj.explorationRequirement.count}
-                                                                </span>
-                                                            )}
-                                                            <span className="text-[9px] font-mono text-text2 border border-white/10 rounded px-2 py-1">
-                                                                Gap val−train:{' '}
-                                                                {team.gap != null ? team.gap.toFixed(3) : '—'}
-                                                            </span>
-                                                        </div>
-
-                                                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                                                            <div>
-                                                                <div className="text-[9px] uppercase text-text2 font-bold mb-1">
-                                                                    Val loss (best run)
-                                                                </div>
-                                                                <Sparkline data={team.lastRunValLoss} stroke="#34d399" />
-                                                            </div>
-                                                            <div className="text-[11px] text-text2 space-y-1">
-                                                                <div>
-                                                                    <span className="text-text2">Accuracy </span>
-                                                                    <span className="font-mono text-text0">{formatPct01(team.bestAccuracy)}</span>
-                                                                </div>
-                                                                <div>
-                                                                    <span className="text-text2">Last run </span>
-                                                                    <span className="font-mono text-text0">
-                                                                        {team.lastRunAt
-                                                                            ? new Date(team.lastRunAt).toLocaleString()
-                                                                            : '—'}
-                                                                    </span>
-                                                                </div>
-                                                                {team.presSubmittedAt && (
-                                                                    <div>
-                                                                        <span className="text-text2">Submitted </span>
-                                                                        <span className="font-mono text-text0">
-                                                                            {new Date(team.presSubmittedAt).toLocaleString()}
-                                                                        </span>
-                                                                    </div>
-                                                                )}
-                                                            </div>
-                                                        </div>
-
-                                                        {cfg && (
-                                                            <div>
-                                                                <div className="text-[9px] uppercase text-text2 font-bold mb-2">
-                                                                    Best-run hyperparameters
-                                                                </div>
-                                                                <div className="flex flex-wrap gap-1.5">
-                                                                    {[
-                                                                        ['lr', cfg.lr],
-                                                                        ['opt', cfg.optimizer],
-                                                                        ['bs', cfg.batchSize],
-                                                                        ['epochs', cfg.epochs],
-                                                                    ]
-                                                                        .filter(([, v]) => v != null && v !== '')
-                                                                        .map(([k, v]) => (
-                                                                            <span
-                                                                                key={k}
-                                                                                className="text-[10px] font-mono bg-bg0/70 border border-white/10 px-2 py-0.5 rounded"
-                                                                            >
-                                                                                {k}:{' '}
-                                                                                <span className="text-accent">{String(v)}</span>
-                                                                            </span>
-                                                                        ))}
-                                                                </div>
-                                                            </div>
-                                                        )}
-
-                                                        {team.breakdownRows.length > 0 && (
-                                                            <div>
-                                                                <div className="text-[9px] uppercase text-text2 font-bold mb-2">
-                                                                    Score anatomy (best run)
-                                                                </div>
-                                                                <ul className="space-y-1.5">
-                                                                    {team.breakdownRows.map((row) => (
-                                                                        <li
-                                                                            key={row.key}
-                                                                            className="flex justify-between text-[10px] font-mono gap-2"
-                                                                        >
-                                                                            <span className="text-text2 truncate">{row.label}</span>
-                                                                            <span
-                                                                                className={
-                                                                                    row.value < 0 ? 'text-red' : 'text-text0'
-                                                                                }
-                                                                            >
-                                                                                {row.value > 0 ? '+' : ''}
-                                                                                {row.value}
-                                                                            </span>
-                                                                        </li>
-                                                                    ))}
-                                                                </ul>
-                                                            </div>
-                                                        )}
-
-                                                        {flags.length > 0 && (
-                                                            <div className="flex flex-wrap gap-1">
-                                                                {flags.map((f) => (
-                                                                    <span
-                                                                        key={f}
-                                                                        className="text-[9px] uppercase font-bold bg-red/15 text-red border border-red/30 px-2 py-0.5 rounded"
-                                                                    >
-                                                                        {f}
-                                                                    </span>
-                                                                ))}
-                                                            </div>
-                                                        )}
-
-                                                        <div>
-                                                            <div className="text-[9px] uppercase text-text2 font-bold mb-2">
-                                                                Accolades
-                                                            </div>
-                                                            <div className="flex flex-wrap gap-1.5">
-                                                                {team.badges.length === 0 ? (
-                                                                    <span className="text-xs italic text-text2">None yet</span>
-                                                                ) : (
-                                                                    team.badges.map((b) => (
-                                                                        <span
-                                                                            key={b}
-                                                                            className="bg-accent/10 border border-accent/25 text-accent px-2 py-0.5 rounded text-[10px] font-bold uppercase"
-                                                                        >
-                                                                            {b}
-                                                                        </span>
-                                                                    ))
-                                                                )}
-                                                            </div>
-                                                        </div>
-                                                    </div>
-                                                )
-                                            })}
-                                        </div>
-                                    )}
-                                </section>
-                            )
-                        })}
-                    </div>
-                )}
             </section>
         </main>
     )

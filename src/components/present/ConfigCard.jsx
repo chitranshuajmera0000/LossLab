@@ -45,42 +45,51 @@ function getChangedParams(config, previousConfig) {
 
 function ConfigCard({ config, previousConfig, lockedParams = [], comparisonLabel = "KEY CHANGES THIS RUN" }) {
 	if (!config) {
-		return <section className="rounded-xl border border-border bg-bg2 p-4 text-sm text-text2">No configuration found.</section>
+		return (
+			<section className="rounded-xl border border-border bg-bg2 p-4 text-base text-text2 md:text-lg">
+				No configuration found.
+			</section>
+		)
 	}
 
 	const changed = getChangedParams(config, previousConfig)
 	const entries = Object.entries(config)
 
 	return (
-		<section className="rounded-xl border border-border bg-bg2 p-3">
-			<header className="mb-3 text-[10px] font-semibold uppercase tracking-[0.14em] text-text2">FINAL CONFIGURATION</header>
+		<section className="max-w-full min-w-0 overflow-hidden rounded-xl border border-border bg-bg2 p-4 md:p-5">
+			<header className="mb-3 text-[12px] font-semibold uppercase tracking-[0.14em] text-text2 md:text-[13px]">
+				FINAL CONFIGURATION
+			</header>
 
-			<div className="grid grid-cols-3 gap-2">
+			<div className="grid grid-cols-3 gap-2 md:gap-3">
 				{entries.map(([key, value]) => {
 					const isChanged = changed.includes(key)
 					const isLocked = lockedParams.includes(key)
 					return (
 						<div
 							key={key}
-							className={`rounded border p-2 ${getTintClass(key, value, config)} ${isChanged ? 'border-l-4 border-l-green' : ''} ${isLocked ? 'opacity-80' : ''}`}
+							className={`rounded border p-2.5 md:p-3 ${getTintClass(key, value, config)} ${isChanged ? 'border-l-4 border-l-green' : ''} ${isLocked ? 'opacity-80' : ''}`}
 						>
-							<div className="font-mono text-[8px] uppercase tracking-[0.1em] text-text2">
+							<div className="font-mono text-[10px] uppercase tracking-[0.1em] text-text2 md:text-[11px]">
 								{titleCase(key)} {isLocked ? '• L' : ''}
 							</div>
-							<div className="mt-1 font-mono text-[13px] font-bold text-text0">{formatValue(value)}</div>
+							<div className="mt-1 font-mono text-[15px] font-bold text-text0 md:text-[16px]">{formatValue(value)}</div>
 						</div>
 					)
 				})}
 			</div>
 
-			<div className="mt-3 border-t border-border pt-2">
-				<div className="mb-2 text-[10px] font-semibold uppercase tracking-[0.1em] text-text2">{comparisonLabel}</div>
-				<div className="flex flex-wrap gap-1.5">
+			<div className="mt-4 border-t border-border pt-3">
+				<div className="mb-2 text-[12px] font-semibold uppercase tracking-[0.1em] text-text2 md:text-[13px]">{comparisonLabel}</div>
+				<div className="flex flex-wrap gap-2">
 					{changed.length === 0 ? (
-						<span className="text-xs italic text-text2">No changes found</span>
+						<span className="text-sm italic text-text2 md:text-base">No changes found</span>
 					) : (
 						changed.map((key) => (
-							<span key={key} className="rounded-full border border-border2 bg-bg3 px-2 py-1 font-mono text-[10px] text-text1">
+							<span
+								key={key}
+								className="rounded-full border border-border2 bg-bg3 px-3 py-1.5 font-mono text-[12px] text-text1 md:text-[13px]"
+							>
 								{formatValue(previousConfig?.[key])} → {formatValue(config[key])}
 							</span>
 						))

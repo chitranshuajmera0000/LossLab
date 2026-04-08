@@ -1,9 +1,11 @@
 function NoteCard({ title, borderClass, titleClass, content }) {
 	const isEmpty = !content || !content.trim()
 	return (
-		<article className={`rounded-lg border border-border bg-bg2 p-4 ${borderClass}`}>
-			<h3 className={`font-mono text-[9px] uppercase tracking-[0.14em] ${titleClass}`}>{title}</h3>
-			<p className={`mt-2 text-sm leading-[1.7] ${isEmpty ? 'italic text-text2' : 'text-text1'}`}>
+		<article className={`min-w-0 max-w-full overflow-hidden rounded-lg border border-border bg-bg2 p-5 md:p-6 ${borderClass}`}>
+			<h3 className={`font-mono text-[12px] uppercase tracking-[0.14em] md:text-[13px] ${titleClass}`}>{title}</h3>
+			<p
+				className={`mt-3 text-lg leading-relaxed md:text-[19px] ${isEmpty ? 'italic text-text2' : 'text-text1'}`}
+			>
 				{isEmpty ? "Team hasn't filled this section yet" : content}
 			</p>
 		</article>
@@ -12,7 +14,7 @@ function NoteCard({ title, borderClass, titleClass, content }) {
 
 function ExplanationPanel({ notes = {} }) {
 	return (
-		<section className="grid grid-cols-1 gap-4 lg:grid-cols-3">
+		<section className="grid min-w-0 max-w-full grid-cols-1 gap-4 lg:grid-cols-3">
 			<NoteCard
 				title="OUR APPROACH"
 				borderClass="border-l-[3px] border-l-accent"

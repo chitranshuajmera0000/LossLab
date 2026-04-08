@@ -45,7 +45,7 @@ export default function ProjectorPresentScreen() {
     return (
         <PresentationDeck
             variant="projector"
-            teamName={teamRow?.team_name}
+            teamName={teamRow?.session_code ?? teamRow?.team_name}
             sessionCode={teamRow?.session_code}
             mission={mission}
             allRuns={allRuns}

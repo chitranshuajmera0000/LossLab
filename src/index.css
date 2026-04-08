@@ -30,11 +30,21 @@
   scrollbar-color: var(--border2) var(--bg2);
 }
 
+html {
+  overflow-x: hidden;
+}
+
 html,
 body,
 #root {
   min-height: 100%;
   margin: 0;
+  max-width: 100%;
+}
+
+body,
+#root {
+  overflow-x: hidden;
 }
 
 body {

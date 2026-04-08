@@ -4,17 +4,11 @@ import { useNavigate } from 'react-router-dom'
 import { useSession } from '../hooks/useSession'
 import { toast } from 'react-hot-toast'
 
-const COLORS = [
-	'#4f8ef7', '#34d399', '#f87171', '#fbbf24', '#f472b6', '#7c6ff7', '#fb923c', '#a3e635'
-]
-
 export default function JoinScreen() {
 	const navigate = useNavigate()
 	const { joinSession } = useSession()
 
 	const [joinCode, setJoinCode] = useState('')
-	const [teamName, setTeamName] = useState('')
-	const [teamColor, setTeamColor] = useState(COLORS[0])
 	const [joinError, setJoinError] = useState('')
 	const [joinLoading, setJoinLoading] = useState(false)
 
@@ -25,22 +19,16 @@ export default function JoinScreen() {
 			setJoinError('Session code must be 6 characters')
 			return
 		}
-		if (!teamName.trim()) {
-			setJoinError('Team name required')
-			return
-		}
 		setJoinLoading(true)
 		const { error, resumed } = await joinSession({
 			code: joinCode.toUpperCase(),
-			teamName: teamName.trim(),
-			color: teamColor,
 		})
 		setJoinLoading(false)
 		if (error === 'not_found') setJoinError('Session code not found — check with your instructor')
 		else if (error === 'inactive') setJoinError('This session has ended')
 		else if (error) setJoinError('Error joining session. Please try again.')
 		else {
-			toast.success(resumed ? `Welcome back, ${teamName.trim()}! Resuming your session.` : `Welcome, ${teamName.trim()}!`)
+			toast.success(resumed ? `Welcome back to ${joinCode.toUpperCase()}! Resuming your session.` : `Joined ${joinCode.toUpperCase()} successfully!`)
 			navigate('/lab')
 		}
 	}
@@ -49,12 +37,6 @@ export default function JoinScreen() {
 		let v = e.target.value.toUpperCase().replace(/[^A-Z0-9]/g, '')
 		if (v.length > 6) v = v.slice(0, 6)
 		setJoinCode(v)
-	}
-
-	const handleTeamName = (e) => {
-		let v = e.target.value
-		if (v.length > 30) v = v.slice(0, 30)
-		setTeamName(v)
 	}
 
 	return (
@@ -91,38 +73,6 @@ export default function JoinScreen() {
 							/>
 						</div>
 
-						{/* Team Name */}
-						<div>
-							<label className="block text-[11px] uppercase tracking-[0.12em] text-text2 mb-2">
-								Team Name
-							</label>
-							<input
-								className="w-full rounded-xl px-4 py-3 bg-bg3 outline-none border border-transparent focus:border-accent/50 transition-colors text-sm"
-								placeholder="e.g. Team Alpha"
-								value={teamName}
-								onChange={handleTeamName}
-								maxLength={30}
-							/>
-						</div>
-
-						{/* Team Color */}
-						<div>
-							<label className="block text-[11px] uppercase tracking-[0.12em] text-text2 mb-2">
-								Team Color
-							</label>
-							<div className="flex gap-2">
-								{COLORS.map((c) => (
-									<button
-										key={c}
-										type="button"
-										className={`w-8 h-8 rounded-full border-2 transition-all ${teamColor === c ? 'ring-2 ring-white scale-110 border-accent' : 'border-transparent hover:scale-105'}`}
-										style={{ background: c }}
-										onClick={() => setTeamColor(c)}
-									/>
-								))}
-							</div>
-						</div>
-
 						{/* Error */}
 						{joinError && (
 							<div className="text-red-400 text-sm rounded-lg bg-red-500/10 border border-red-500/20 px-3 py-2">
@@ -134,7 +84,7 @@ export default function JoinScreen() {
 						<button
 							className="w-full rounded-xl bg-gradient-to-r from-accent to-accent2 px-4 py-3 font-bold text-white shadow-[0_0_20px_rgba(34,211,238,0.3)] hover:shadow-[0_0_30px_rgba(34,211,238,0.5)] hover:-translate-y-0.5 transition-all duration-300 disabled:opacity-60 disabled:cursor-not-allowed disabled:hover:translate-y-0"
 							type="submit"
-							disabled={joinLoading || joinCode.length !== 6 || !teamName.trim()}
+							disabled={joinLoading || joinCode.length !== 6}
 						>
 							{joinLoading ? 'Joining...' : 'Join Session →'}
 						</button>

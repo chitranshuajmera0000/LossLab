@@ -214,29 +214,41 @@ export function useFeed(sessionCode) {
     }
   }, [sessionCode, reconnectNonce])
 
+  const canonicalTeams = useMemo(() => {
+    const bySessionCode = {}
+    for (const team of teams) {
+      const key = team.session_code || `team:${team.id}`
+      const prev = bySessionCode[key]
+      if (!prev || (team.run_count || 0) > (prev.run_count || 0)) {
+        bySessionCode[key] = team
+      }
+    }
+    return Object.values(bySessionCode)
+  }, [teams])
+
   const teamMap = useMemo(() => {
-    return teams.reduce((map, team) => {
+    return canonicalTeams.reduce((map, team) => {
       map[team.id] = team
       return map
     }, {})
-  }, [teams])
+  }, [canonicalTeams])
 
   const bestRuns = useMemo(() => {
     const result = {}
-    for (const team of teams) {
+    for (const team of canonicalTeams) {
       const teamRuns = runs.filter((run) => run.team_id === team.id)
       result[team.id] = teamRuns.sort((a, b) => (b.final_accuracy || 0) - (a.final_accuracy || 0))[0] || null
     }
     return result
-  }, [teams, runs])
+  }, [canonicalTeams, runs])
 
   const leaderboard = useMemo(() => {
-    const rows = teams.map((team) => {
+    const rows = canonicalTeams.map((team) => {
       const bestRun = bestRuns[team.id]
       const presentation = presentationsByTeam[team.id]
       return {
         id: team.id,
-        name: team.team_name,
+        name: team.session_code || team.team_name,
         color: team.color,
         accuracy: bestRun?.final_accuracy || 0,
         val_loss: bestRun?.final_val_loss,
@@ -252,7 +264,7 @@ export function useFeed(sessionCode) {
       if ((b.score || 0) !== (a.score || 0)) return (b.score || 0) - (a.score || 0)
       return (b.accuracy || 0) - (a.accuracy || 0)
     })
-  }, [teams, bestRuns, presentationsByTeam])
+  }, [canonicalTeams, bestRuns, presentationsByTeam])
 
   const presentingTeamId =
     Object.values(presentationsByTeam).find((row) => row?.is_presenting)?.team_id || null
@@ -262,8 +274,8 @@ export function useFeed(sessionCode) {
     ? getMission(getMissionIdForLabSessionCode(sessionCode) ?? sessionData.mission_id)
     : null
   const dataset = mission ? { name: mission.dataset } : null
-  const totalTeams = teams.length
-  const submittedCount = teams.filter((team) => bestRuns[team.id]).length
+  const totalTeams = canonicalTeams.length
+  const submittedCount = canonicalTeams.filter((team) => bestRuns[team.id]).length
   const timerStart = sessionData?.created_at || sessionData?.started_at || null
   const storedSession = (() => {
     try {
@@ -300,7 +312,7 @@ export function useFeed(sessionCode) {
   }
 
   return {
-    teams,
+    teams: canonicalTeams,
     runs,
     leaderboard,
     sessionData,

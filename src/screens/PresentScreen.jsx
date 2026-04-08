@@ -39,8 +39,8 @@ function PresentScreen() {
     return (
         <PresentationDeck
             variant="lab"
-            teamName={teamRow?.team_name ?? team?.team_name}
-            sessionCode={teamRow?.session_code}
+            teamName={teamRow?.session_code ?? team?.session_code ?? team?.team_name}
+            sessionCode={teamRow?.session_code ?? team?.session_code}
             mission={mission}
             allRuns={allRuns}
             bestRun={bestRun}

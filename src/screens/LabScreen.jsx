@@ -268,7 +268,7 @@ function LabScreen() {
 
 				<div className="flex items-center gap-2 text-xs">
 					<span className="text-text1">Run {allRuns.length + 1}</span>
-					<span className="rounded-full border border-border bg-bg2 px-2 py-1 text-text0">{team?.team_name || 'Team'}</span>
+					<span className="rounded-full border border-border bg-bg2 px-2 py-1 text-text0">{sessionCode || team?.session_code || team?.team_name || 'Session'}</span>
 					<button
 						type="button"
 						onClick={() => navigate('/present')}

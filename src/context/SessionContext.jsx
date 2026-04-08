@@ -17,9 +17,9 @@ export function SessionProvider({ children }) {
   const [error, setError] = useState(null)
 
   /**
-   * Join an existing session with a team
+   * Join an existing session using session code only (one team row per session code).
    */
-  const joinSession = useCallback(async ({ code, teamName, color }) => {
+  const joinSession = useCallback(async ({ code }) => {
     setIsLoading(true)
     setError(null)
 
@@ -38,21 +38,23 @@ export function SessionProvider({ children }) {
         getMissionIdForLabSessionCode(code) ?? sessionData.mission_id
       const missionObj = getMission(resolvedMissionId)
 
-      // 2. Check if this team name already exists in this session (resume from another PC)
-      const { data: existingTeam } = await supabase
+      // 2. Reuse existing team row for this session code if present.
+      const { data: existingTeams, error: existingTeamsErr } = await supabase
         .from('teams')
         .select('*')
         .eq('session_code', code)
-        .eq('team_name', teamName)
-        .single()
+        .order('created_at', { ascending: true })
+        .limit(1)
 
-      let teamData = existingTeam
+      if (existingTeamsErr) throw existingTeamsErr
+
+      let teamData = existingTeams?.[0] || null
 
       if (!teamData) {
-        // 3. First time joining — create a new team row
+        // 3. First join for this session code — create canonical team row.
         const { data: newTeam, error: teamErr } = await supabase
           .from('teams')
-          .insert([{ session_code: code, team_name: teamName, color: color || '#4f8ef7' }])
+          .insert([{ session_code: code, team_name: code, color: '#4f8ef7' }])
           .select('*')
           .single()
 
@@ -63,7 +65,6 @@ export function SessionProvider({ children }) {
       // 4. Persist to localStorage and set state
       const sessionState = {
         teamId: teamData.id,
-        teamName: teamData.team_name,
         sessionCode: code,
         color: teamData.color,
         missionId: resolvedMissionId,
@@ -74,7 +75,7 @@ export function SessionProvider({ children }) {
       setTeam(teamData)
       setMission(missionObj)
 
-      return { team: teamData, session: sessionData, mission: missionObj, resumed: !!existingTeam }
+      return { team: teamData, session: sessionData, mission: missionObj, resumed: !!existingTeams?.length }
     } catch (err) {
       const msg = err.message || 'Failed to join session'
       setError(msg)

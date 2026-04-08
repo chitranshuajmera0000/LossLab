@@ -17,12 +17,14 @@ function configRows(a, b) {
 
 export default function CompareOverlay({ teamA, teamB, onClose }) {
   if (!teamA || !teamB) return null
+  const labelA = teamA.team.session_code || teamA.team.team_name || 'Session A'
+  const labelB = teamB.team.session_code || teamB.team.team_name || 'Session B'
   // Chart data
   const chartData = {
     labels: teamA.bestRun?.train_loss?.map((_, i) => i + 1) || [],
     datasets: [
       {
-        label: `${teamA.team.name} Train Loss`,
+        label: `${labelA} Train Loss`,
         data: teamA.bestRun?.train_loss || [],
         borderColor: teamA.team.color,
         backgroundColor: teamA.team.color,
@@ -31,7 +33,7 @@ export default function CompareOverlay({ teamA, teamB, onClose }) {
         fill: false,
       },
       {
-        label: `${teamA.team.name} Val Loss`,
+        label: `${labelA} Val Loss`,
         data: teamA.bestRun?.val_loss_curve || [],
         borderColor: teamA.team.color,
         borderDash: [6, 4],
@@ -42,7 +44,7 @@ export default function CompareOverlay({ teamA, teamB, onClose }) {
         opacity: 0.5,
       },
       {
-        label: `${teamB.team.name} Train Loss`,
+        label: `${labelB} Train Loss`,
         data: teamB.bestRun?.train_loss || [],
         borderColor: '#ec4899',
         backgroundColor: '#ec4899',
@@ -51,7 +53,7 @@ export default function CompareOverlay({ teamA, teamB, onClose }) {
         fill: false,
       },
       {
-        label: `${teamB.team.name} Val Loss`,
+        label: `${labelB} Val Loss`,
         data: teamB.bestRun?.val_loss_curve || [],
         borderColor: '#ec4899',
         borderDash: [6, 4],
@@ -88,14 +90,14 @@ export default function CompareOverlay({ teamA, teamB, onClose }) {
         <X size={32} />
       </button>
       {/* Title */}
-      <div className="text-2xl font-bold mb-2">{teamA.team.name} vs {teamB.team.name}</div>
+      <div className="text-2xl font-bold mb-2">{labelA} vs {labelB}</div>
       {/* Chart */}
       <div className="w-full max-w-2xl h-[400px] bg1 rounded-xl p-6 flex flex-col items-center">
         <Line data={chartData} options={chartOptions} height={400} />
         {/* Legend */}
         <div className="flex gap-6 mt-4 text-sm">
-          <span className="flex items-center gap-2"><span className="inline-block w-4 h-2 rounded bg-[var(--teamA)]" style={{ background: teamA.team.color }} />{teamA.team.name}</span>
-          <span className="flex items-center gap-2"><span className="inline-block w-4 h-2 rounded bg-pink-400" />{teamB.team.name}</span>
+          <span className="flex items-center gap-2"><span className="inline-block w-4 h-2 rounded bg-[var(--teamA)]" style={{ background: teamA.team.color }} />{labelA}</span>
+          <span className="flex items-center gap-2"><span className="inline-block w-4 h-2 rounded bg-pink-400" />{labelB}</span>
         </div>
       </div>
       {/* Config diff */}
@@ -105,8 +107,8 @@ export default function CompareOverlay({ teamA, teamB, onClose }) {
           <thead>
             <tr className="text2">
               <th className="text-left px-2 py-1">Param</th>
-              <th className="text-left px-2 py-1">{teamA.team.name}</th>
-              <th className="text-left px-2 py-1">{teamB.team.name}</th>
+              <th className="text-left px-2 py-1">{labelA}</th>
+              <th className="text-left px-2 py-1">{labelB}</th>
             </tr>
           </thead>
           <tbody>

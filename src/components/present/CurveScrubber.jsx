@@ -51,7 +51,7 @@ function CurveScrubber({ bestRun }) {
 
 	if (!normalized) {
 		return (
-			<section className="rounded-xl border border-border bg-bg2 p-4 text-sm text-text2">
+			<section className="rounded-xl border border-border bg-bg2 p-4 text-base text-text2 md:text-lg">
 				No run available for curve scrubber yet.
 			</section>
 		)
@@ -99,7 +99,23 @@ function CurveScrubber({ bestRun }) {
 		maintainAspectRatio: false,
 		animation: false,
 		plugins: {
-			legend: { display: false },
+			legend: {
+				display: true,
+				position: 'bottom',
+				align: 'start',
+				labels: {
+					color: '#a8adc8',
+					usePointStyle: true,
+					pointStyle: 'line',
+					boxWidth: 28,
+					boxHeight: 10,
+					padding: 16,
+					font: {
+						size: 14,
+						weight: '600',
+					},
+				},
+			},
 			scrubberLine: { index: epochIndex },
 			tooltip: {
 				backgroundColor: '#111420',
@@ -110,19 +126,22 @@ function CurveScrubber({ bestRun }) {
 			},
 		},
 		scales: {
-			x: { ticks: { color: '#5c6285' }, grid: { color: '#1e2338' } },
+			x: {
+				ticks: { color: '#5c6285', font: { size: 13 } },
+				grid: { color: '#1e2338' },
+			},
 			y: {
 				min: 0,
 				max: 3,
 				position: 'left',
-				ticks: { color: '#5c6285' },
+				ticks: { color: '#5c6285', font: { size: 13 } },
 				grid: { color: '#1e2338' },
 			},
 			y1: {
 				min: 0,
 				max: 1,
 				position: 'right',
-				ticks: { color: '#5c6285' },
+				ticks: { color: '#5c6285', font: { size: 13 } },
 				grid: { drawOnChartArea: false },
 			},
 		},
@@ -132,14 +151,16 @@ function CurveScrubber({ bestRun }) {
 	const acc = (normalized.accuracy[epochIndex] ?? 0) * 100
 
 	return (
-		<section className="rounded-xl border border-border bg-bg2 p-3">
-			<header className="mb-2 text-[10px] font-semibold uppercase tracking-[0.14em] text-text2">Curve Scrubber</header>
+		<section className="max-w-full min-w-0 overflow-hidden rounded-xl border border-border bg-bg2 p-4 md:p-5">
+			<header className="mb-3 text-[13px] font-semibold uppercase tracking-[0.14em] text-text2 md:text-[14px]">
+				Curve Scrubber
+			</header>
 
-			<div className="h-[280px]">
+			<div className="relative h-[300px] w-full max-w-full min-w-0 overflow-hidden md:h-[340px]">
 				<Line data={data} options={options} plugins={[verticalLinePlugin]} />
 			</div>
 
-			<div className="mt-3 grid grid-cols-1 gap-3 lg:grid-cols-[1fr_auto] lg:items-center">
+			<div className="mt-4 grid grid-cols-1 gap-3 lg:grid-cols-[1fr_auto] lg:items-center">
 				<input
 					type="range"
 					min={0}
@@ -147,15 +168,15 @@ function CurveScrubber({ bestRun }) {
 					step={1}
 					value={epochIndex}
 					onChange={(e) => setEpochIndex(Number(e.target.value))}
-					className="h-2 w-full cursor-pointer appearance-none rounded-lg bg-border2"
+					className="h-3 w-full cursor-pointer appearance-none rounded-lg bg-border2"
 				/>
 
-				<div className="flex flex-wrap items-center gap-2 font-mono text-xs">
-					<span className="rounded-md bg-bg3 px-2 py-1 text-text2">
+				<div className="flex flex-wrap items-center gap-2 font-mono text-sm md:text-[15px]">
+					<span className="rounded-md bg-bg3 px-3 py-1.5 text-text2">
 						Epoch {epochIndex + 1} / {total}
 					</span>
-					<span className="rounded-md bg-accent/20 px-2 py-1 text-accent">Train Loss: {train.toFixed(3)}</span>
-					<span className="rounded-md bg-green/20 px-2 py-1 text-green">Accuracy: {acc.toFixed(1)}%</span>
+					<span className="rounded-md bg-accent/20 px-3 py-1.5 text-accent">Train Loss: {train.toFixed(3)}</span>
+					<span className="rounded-md bg-green/20 px-3 py-1.5 text-green">Accuracy: {acc.toFixed(1)}%</span>
 				</div>
 			</div>
 		</section>

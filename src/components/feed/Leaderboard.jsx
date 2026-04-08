@@ -55,7 +55,7 @@ export default function Leaderboard({ leaderboard = [], presentingTeamId }) {
           <thead>
             <tr className="text2 text-xs">
               <th className="text-left px-2 py-1">Rank</th>
-              <th className="text-left px-2 py-1">Team</th>
+              <th className="text-left px-2 py-1">Session Code</th>
               <th className="text-left px-2 py-1">Optimizer</th>
               <th className="text-left px-2 py-1">Activation</th>
               <th className="text-left px-2 py-1">Accuracy</th>
