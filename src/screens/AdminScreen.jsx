@@ -313,41 +313,37 @@ function AdminScreen() {
         try {
             const missionObj = MISSIONS.find(m => m.id === team.missionId) || MISSIONS[0]
 
-            // Pull the raw run rows the team has recorded
-            let teamRuns = runs.filter(r => r.team_id === team.id)
+            // We purposefully do NOT pass the team's actual failed runs to the Rescue Deck.
+            // The Rescue Deck is designed to be a completely clean "Instructor Solution" presentation
+            // that shows exactly one run: the correct, >90% accuracy solution.
+            let teamRuns = []
 
-            // If the team made ZERO runs, we need a demonstration curve for the instructor to explain!
-            // We simulate a WINNING config for their assigned mission.
-            let syntheticBest = null
-            let isSynthetic = false
-            if (teamRuns.length === 0) {
-                isSynthetic = true
-                const winOveride = WINNING_CONFIGS[missionObj.id] || {}
-                const cfg = { ...(missionObj.defaultConfig || {}), ...winOveride }
-                const simResult = await lookupCurve(cfg, missionObj)
-                const syntheticRun = {
-                    id: 'synthetic-run-1',
-                    team_id: team.id,
-                    run_number: 1,
-                    config: cfg,
-                    train_loss: simResult.trainLoss,
-                    val_loss: simResult.valLoss,
-                    accuracy: simResult.accuracy,
-                    final_train_loss: simResult.finalTrainLoss,
-                    final_val_loss: simResult.finalValLoss,
-                    final_accuracy: simResult.finalAccuracy,
-                    diverged: simResult.diverged,
-                    vanished: simResult.vanished,
-                    flatlined: simResult.flatlined,
-                    overfit: simResult.overfit,
-                    score: 0
-                }
-                teamRuns = [syntheticRun]
-                syntheticBest = {
-                    run: syntheticRun,
-                    resultObj: simResult
-                }
+            const winOveride = WINNING_CONFIGS[missionObj.id] || {}
+            const cfg = { ...(missionObj.defaultConfig || {}), ...winOveride }
+            const simResult = await lookupCurve(cfg, missionObj)
+            const syntheticRun = {
+                id: 'synthetic-run-1',
+                team_id: team.id,
+                run_number: 1,
+                config: cfg,
+                train_loss: simResult.trainLoss,
+                val_loss: simResult.valLoss,
+                accuracy: simResult.accuracy,
+                final_train_loss: simResult.finalTrainLoss,
+                final_val_loss: simResult.finalValLoss,
+                final_accuracy: simResult.finalAccuracy,
+                diverged: simResult.diverged,
+                vanished: simResult.vanished,
+                flatlined: simResult.flatlined,
+                overfit: simResult.overfit,
+                score: 0
             }
+            teamRuns = [syntheticRun]
+            const syntheticBest = {
+                run: syntheticRun,
+                resultObj: simResult
+            }
+            const isSynthetic = true
 
             const notes = generateRescueNotes(team, syntheticBest, isSynthetic)
 
