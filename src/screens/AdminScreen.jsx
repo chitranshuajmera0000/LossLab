@@ -3,6 +3,7 @@ import { supabase } from '../lib/supabase.js'
 import calculateScore from '../engine/scoring.js'
 import { MISSIONS } from '../missions/missions.js'
 import { LAB_TEAM_SESSION_CODES, getMissionForLabSessionCode } from '../config/labSessions.js'
+import { lookupCurve } from '../engine/curveLookup.js'
 
 const TEAM_CODES = LAB_TEAM_SESSION_CODES
 
@@ -13,6 +14,111 @@ function getMissionLimit(missionId) {
 
 function getMission(missionId) {
     return MISSIONS.find(m => m.id === missionId) || MISSIONS[0]
+}
+
+/**
+ * Generates detailed, instructor-quality presentation notes for a team
+ * that couldn't solve their mission. Used by the Rescue Deck feature.
+ */
+function generateRescueNotes(team, syntheticBest = null, isSynthetic = false) {
+    const mission = MISSIONS.find(m => m.id === team.missionId) || MISSIONS[0]
+    const best = syntheticBest || team.bestRunPayload
+    const cfg = best?.run?.config || {}
+    const res = best?.resultObj || {}
+    const acc = res.finalAccuracy || team.bestAccuracy || 0
+    const accPct = (acc * 100).toFixed(1)
+    const valLoss = res.finalValLoss?.toFixed(4) ?? '—'
+    const trainLoss = res.finalTrainLoss?.toFixed(4) ?? '—'
+    const gap = team.gap != null ? team.gap.toFixed(3) : '—'
+    const runsUsed = team.runsUsed
+    const missionTitle = mission.title || team.missionTitle
+
+    // --- Approach note ---
+    let approachLines = []
+    approachLines.push(`Mission: ${missionTitle} — ${mission.concept || ''}`)
+    approachLines.push(`Dataset: ${mission.dataset || 'N/A'}`)
+    approachLines.push(`Failure mode: ${mission.failureMode || 'Multiple hyperparameter interactions'}`)
+    approachLines.push('')
+    approachLines.push(isSynthetic ? `Instructor Solving Config:` : `Default config started with:`)
+    if (cfg.lr != null) approachLines.push(`  • Learning rate: ${cfg.lr}`)
+    if (cfg.optimizer) approachLines.push(`  • Optimizer: ${cfg.optimizer}`)
+    if (cfg.batchSize != null) approachLines.push(`  • Batch size: ${cfg.batchSize}`)
+    if (cfg.layers != null) approachLines.push(`  • Layers: ${cfg.layers}`)
+    if (cfg.dropout != null) approachLines.push(`  • Dropout: ${cfg.dropout}`)
+    approachLines.push('')
+    approachLines.push(`After ${runsUsed} experiment${runsUsed !== 1 ? 's' : ''}, best result: val acc ${accPct}% | val loss ${valLoss} | train loss ${trainLoss} | gap ${gap}`)
+    if (team.missionWon) {
+        approachLines.push('Win condition: ✓ MET')
+    } else {
+        approachLines.push(`Win condition: NOT MET (required: ${mission.winCondition || 'See mission brief'})`)
+    }
+    const approach = approachLines.join('\n')
+
+    // --- What broke note ---
+    let brokeLines = []
+    brokeLines.push(`Root cause: ${mission.failureMode || 'The default hyperparameters create an unstable training regime.'}`)
+    brokeLines.push('')
+    if (res.diverged) {
+        brokeLines.push('• DIVERGENCE: Loss increased instead of decreasing. The learning rate was too high — gradient steps overshot the minimum on every update, sending the model further from convergence each epoch.')
+    }
+    if (res.flatlined) {
+        brokeLines.push('• FLATLINE: Accuracy stuck at ~10% (random chance). Zero-initialised weights caused perfect symmetry — all neurons compute identical gradients so no differentiation could occur. The network could not break symmetry.')
+    }
+    if (res.vanished) {
+        brokeLines.push('• VANISHING GRADIENT: Deep sigmoid activations squeeze derivatives to near-zero. By the time the gradient reaches early layers it is too small to move the weights — only the final layers receive any learning signal.')
+    }
+    if (res.overfit) {
+        brokeLines.push(`• OVERFITTING: Train loss ${trainLoss} vs val loss ${valLoss} — gap of ${gap}. The model memorised training noise rather than learning a generalizable boundary. Needs regularization, dropout or smaller capacity.`)
+    }
+    if (!res.diverged && !res.flatlined && !res.vanished && !res.overfit) {
+        brokeLines.push(`• INSUFFICIENT LEARNING: The model stabilised but never reached the win threshold of ${(mission.winThreshold * 100).toFixed(0)}% accuracy. The hyperparameter combination (LR, optimizer, batch size) did not interact optimally for this loss landscape.`)
+    }
+    brokeLines.push('')
+    brokeLines.push(`Key insight: ${mission.hint || 'All hyperparameters interact — changing one in isolation often trades one failure mode for another.'}`)
+    const broke = brokeLines.join('\n')
+
+    // --- Core concept note ---
+    let conceptLines = []
+    conceptLines.push(`Core ML concept: ${mission.concept || 'Hyperparameter interactions'}`)
+    conceptLines.push('')
+    conceptLines.push(`Win condition required: ${mission.winCondition}`)
+    if (mission.stretchGoal) conceptLines.push(`Stretch goal: ${mission.stretchGoal}`)
+    conceptLines.push('')
+    conceptLines.push('What students needed to discover:')
+    // Mission-specific explanations
+    if (mission.id === 'exploder') {
+        conceptLines.push('1. LR=2.0 with SGD is always explosive — the update step overwhelms the gradient signal')
+        conceptLines.push('2. SGD (no momentum adaptation) amplifies gradient noise at small batches — optimizer must be changed')
+        conceptLines.push('3. Batch size=1 means each gradient is computed from a single sample — noise is maximal. Need batch≥32')
+        conceptLines.push('4. All three must be fixed together: lower LR + adaptive optimizer (Adam/RMSProp) + batch≥32')
+    } else if (mission.id === 'flatliner') {
+        conceptLines.push('1. Zero weight init → symmetry problem: all neurons output the same value, gradients are identical, no learning')
+        conceptLines.push('2. Sigmoid saturates in deep networks — derivative approaches zero for large activations (vanishing gradient)')
+        conceptLines.push('3. 7 hidden layers with sigmoid = gradient multiplied by <1 seven times → near-zero by layer 1')
+        conceptLines.push('4. Fix order: init first (Xavier/He), then activation (ReLU), confirming two separate problems')
+    } else if (mission.id === 'memorizer') {
+        conceptLines.push('1. 6 layers × 256 neurons for 150 training samples = millions of parameters memorizing noise')
+        conceptLines.push('2. No dropout = no regularization pressure, model perfectly fits train set')
+        conceptLines.push('3. Batch=512 on 150 samples means the full dataset each step — no stochastic noise to help generalize')
+        conceptLines.push('4. Must reduce capacity (layers/width) AND add regularization (dropout) simultaneously')
+    } else if (mission.id === 'slowlearner') {
+        conceptLines.push('1. SGD on noisy data oscillates — gets trapped in flat regions of the loss landscape')
+        conceptLines.push('2. The optimal LR is different for every optimizer: Adam prefers 0.001, SGD needs 0.1+')
+        conceptLines.push('3. Cosine/plateau schedulers change the effective LR over time — different optimizers respond differently')
+        conceptLines.push('4. Must explore the optimizer × LR × scheduler space systematically to find the peak')
+    } else if (mission.id === 'symmetrybreaker') {
+        conceptLines.push('1. Small batch (8) with no dropout creates mild overfitting visible in the val-train gap')
+        conceptLines.push('2. Dropout effectiveness depends on batch size — more dropout needed when batch noise is low')
+        conceptLines.push('3. L2 and dropout approach regularization differently: L2 shrinks weights, dropout removes pathways')
+        conceptLines.push('4. Both the accuracy AND the gap must be satisfied — improving one can worsen the other')
+    } else {
+        conceptLines.push('1. Hyperparameters interact multiplicatively — the combined effect is not the sum of individual effects')
+        conceptLines.push('2. Fixing one parameter in isolation often shifts the problem rather than solving it')
+        conceptLines.push('3. Systematic exploration (one change at a time, reading the curve) is more efficient than guessing')
+    }
+    const concept = conceptLines.join('\n')
+
+    return { approach, broke, concept }
 }
 
 function formatPct01(x) {
@@ -48,10 +154,10 @@ function MeterBar({ value, max, tone = 'accent' }) {
         tone === 'green'
             ? 'bg-green'
             : tone === 'pink'
-              ? 'bg-pink'
-              : tone === 'amber'
-                ? 'bg-amber'
-                : 'bg-accent'
+                ? 'bg-pink'
+                : tone === 'amber'
+                    ? 'bg-amber'
+                    : 'bg-accent'
     return (
         <div className="h-2 w-full rounded-full bg-bg0 overflow-hidden border border-white/10">
             <div className={`h-full ${bg} transition-all duration-500`} style={{ width: `${pct}%` }} />
@@ -72,6 +178,8 @@ function AdminScreen() {
     const [resetFeedback, setResetFeedback] = useState(null)
     const [syncStatus, setSyncStatus] = useState('connecting')
     const [lastSyncAt, setLastSyncAt] = useState(null)
+    const [rescuingTeamId, setRescuingTeamId] = useState(null)
+    const [rescueDialog, setRescueDialog] = useState({ open: false, team: null })
 
     const channelRef = useRef(null)
 
@@ -186,6 +294,92 @@ function AdminScreen() {
         closeResetDialog()
         if (team) await handleResetRuns(team)
     }
+
+    // ── Rescue Deck ──────────────────────────────────────────────────────────
+    const WINNING_CONFIGS = {
+        exploder: { lr: 0.001, optimizer: 'adam', batchSize: 64, epochs: 30 },
+        flatliner: { lr: 0.001, optimizer: 'adam', activation: 'relu', init: 'he', batchSize: 32, layers: 7, epochs: 50 },
+        memorizer: { lr: 0.001, optimizer: 'adam', activation: 'relu', layers: 2, width: 32, dropout: 0.5, batchSize: 32, epochs: 60 },
+        slowlearner: { lr: 0.001, optimizer: 'adam', scheduler: 'cosine', epochs: 50 },
+        symmetrybreaker: { lr: 0.001, optimizer: 'adam', dropout: 0.2, batchSize: 64, epochs: 60 }
+    }
+
+    // Auto-prepares a standalone rescue presentation for a team that couldn't solve the mission.
+    // Opens in a NEW TAB at /rescue?d=<base64> — zero DB writes, zero interference
+    // with the team's own session or presentation link.
+    const handleRescueDeck = async (team) => {
+        if (!team?.id) return
+        setRescuingTeamId(team.id)
+        try {
+            const missionObj = MISSIONS.find(m => m.id === team.missionId) || MISSIONS[0]
+
+            // Pull the raw run rows the team has recorded
+            let teamRuns = runs.filter(r => r.team_id === team.id)
+
+            // If the team made ZERO runs, we need a demonstration curve for the instructor to explain!
+            // We simulate a WINNING config for their assigned mission.
+            let syntheticBest = null
+            let isSynthetic = false
+            if (teamRuns.length === 0) {
+                isSynthetic = true
+                const winOveride = WINNING_CONFIGS[missionObj.id] || {}
+                const cfg = { ...(missionObj.defaultConfig || {}), ...winOveride }
+                const simResult = await lookupCurve(cfg, missionObj)
+                const syntheticRun = {
+                    id: 'synthetic-run-1',
+                    team_id: team.id,
+                    run_number: 1,
+                    config: cfg,
+                    train_loss: simResult.trainLoss,
+                    val_loss: simResult.valLoss,
+                    accuracy: simResult.accuracy,
+                    final_train_loss: simResult.finalTrainLoss,
+                    final_val_loss: simResult.finalValLoss,
+                    final_accuracy: simResult.finalAccuracy,
+                    diverged: simResult.diverged,
+                    vanished: simResult.vanished,
+                    flatlined: simResult.flatlined,
+                    overfit: simResult.overfit,
+                    score: 0
+                }
+                teamRuns = [syntheticRun]
+                syntheticBest = {
+                    run: syntheticRun,
+                    resultObj: simResult
+                }
+            }
+
+            const notes = generateRescueNotes(team, syntheticBest, isSynthetic)
+
+            const urlPayload = {
+                sessionCode: team.sessionCode,
+                missionId: team.missionId,
+                runs: teamRuns,
+                notes,
+            }
+
+            // Encode as base64url (URL-safe, no padding issues)
+            const json = JSON.stringify(urlPayload)
+            const b64 = btoa(unescape(encodeURIComponent(json)))
+                .replace(/\+/g, '-')
+                .replace(/\//g, '_')
+                .replace(/=+$/, '')
+
+            const url = `${window.location.origin}/rescue?d=${b64}`
+            window.open(url, '_blank', 'noopener,noreferrer')
+
+            setResetFeedback({ type: 'success', text: `Rescue deck opened for ${team.sessionCode} ✓` })
+        } catch (err) {
+            setResetFeedback({ type: 'error', text: err?.message || 'Failed to open rescue deck' })
+        } finally {
+            setRescuingTeamId(null)
+            setRescueDialog({ open: false, team: null })
+        }
+    }
+
+
+    const openRescueDialog = (team) => setRescueDialog({ open: true, team })
+    const closeRescueDialog = () => setRescueDialog({ open: false, team: null })
 
     useEffect(() => {
         if (!resetFeedback) return undefined
@@ -501,7 +695,7 @@ function AdminScreen() {
         return (
             <div className="flex min-h-screen items-center justify-center bg-bg0 text-text0 flex-col">
                 <div className="bg-gradient-to-r from-accent to-accent2 bg-clip-text font-['Syne'] text-4xl font-bold text-transparent mb-8">
-                    LossLab Admin
+                    Tune CNN Admin
                 </div>
                 <form
                     onSubmit={handleLogin}
@@ -534,7 +728,7 @@ function AdminScreen() {
             <header className="flex min-h-[72px] shrink-0 flex-wrap items-center justify-between gap-4 border-b border-border bg-bg1 px-6 py-3 shadow-sm">
                 <div className="flex flex-wrap items-center gap-6">
                     <div className="bg-gradient-to-r from-accent to-accent2 bg-clip-text font-['Syne'] text-2xl font-bold text-transparent">
-                        LossLab Admin
+                        Tune CNN Admin
                     </div>
                     <div className="flex flex-col gap-1 border-l border-white/10 pl-6">
                         <div className="flex items-center gap-2 flex-wrap">
@@ -555,13 +749,12 @@ function AdminScreen() {
                 <div className="flex items-center gap-6">
                     <div className="flex items-center gap-4">
                         <div
-                            className={`rounded-full border px-2.5 py-1 text-[10px] font-mono uppercase tracking-wider ${
-                                syncStatus === 'live'
-                                    ? 'border-green/40 text-green bg-green/10'
-                                    : syncStatus === 'polling'
-                                      ? 'border-amber/40 text-amber bg-amber/10'
-                                      : 'border-white/15 text-text2 bg-white/5'
-                            }`}
+                            className={`rounded-full border px-2.5 py-1 text-[10px] font-mono uppercase tracking-wider ${syncStatus === 'live'
+                                ? 'border-green/40 text-green bg-green/10'
+                                : syncStatus === 'polling'
+                                    ? 'border-amber/40 text-amber bg-amber/10'
+                                    : 'border-white/15 text-text2 bg-white/5'
+                                }`}
                         >
                             {syncStatus === 'live' ? 'Live' : syncStatus === 'polling' ? 'Polling' : 'Connecting'}
                         </div>
@@ -632,11 +825,10 @@ function AdminScreen() {
                         return (
                             <article
                                 key={s.code}
-                                className={`rounded-2xl border ${
-                                    team?.isReady
-                                        ? 'border-green/45 bg-gradient-to-b from-green/10 to-bg1/80'
-                                        : 'border-white/10 bg-bg1/70'
-                                } backdrop-blur-xl overflow-hidden flex flex-col shadow-lg shadow-black/25`}
+                                className={`rounded-2xl border ${team?.isReady
+                                    ? 'border-green/45 bg-gradient-to-b from-green/10 to-bg1/80'
+                                    : 'border-white/10 bg-bg1/70'
+                                    } backdrop-blur-xl overflow-hidden flex flex-col shadow-lg shadow-black/25`}
                             >
                                 <div className="px-4 pt-4 pb-3 border-b border-white/5 bg-gradient-to-r from-accent/10 via-transparent to-accent2/10">
                                     <div className="flex items-start justify-between gap-2">
@@ -813,6 +1005,15 @@ function AdminScreen() {
                                                 >
                                                     Copy projector link
                                                 </button>
+                                                <button
+                                                    type="button"
+                                                    onClick={() => openRescueDialog(team)}
+                                                    disabled={rescuingTeamId === team.id}
+                                                    title="Auto-generate presentation notes and submit the deck on behalf of this team"
+                                                    className="text-[10px] uppercase font-bold tracking-wider rounded-lg bg-amber/15 text-amber border border-amber/40 px-3 py-1.5 hover:bg-amber/25 transition disabled:opacity-50"
+                                                >
+                                                    {rescuingTeamId === team.id ? 'Preparing…' : '🛟 Rescue Deck'}
+                                                </button>
                                             </div>
                                         </>
                                     )}
@@ -826,11 +1027,10 @@ function AdminScreen() {
             {resetFeedback && (
                 <div className="pointer-events-none fixed bottom-6 right-6 z-40">
                     <div
-                        className={`rounded-xl border px-4 py-3 text-sm font-mono shadow-xl ${
-                            resetFeedback.type === 'success'
-                                ? 'border-green/40 bg-green/10 text-green'
-                                : 'border-red/40 bg-red/10 text-red'
-                        }`}
+                        className={`rounded-xl border px-4 py-3 text-sm font-mono shadow-xl ${resetFeedback.type === 'success'
+                            ? 'border-green/40 bg-green/10 text-green'
+                            : 'border-red/40 bg-red/10 text-red'
+                            }`}
                     >
                         {resetFeedback.text}
                     </div>
@@ -866,6 +1066,44 @@ function AdminScreen() {
                                 className="rounded-lg border border-red/50 bg-red/20 px-3 py-2 text-xs font-bold uppercase tracking-wider text-red hover:bg-red/30"
                             >
                                 Confirm Reset
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            )}
+
+            {rescueDialog.open && (
+                <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4 backdrop-blur-sm">
+                    <div className="w-full max-w-lg rounded-2xl border border-amber/30 bg-bg1 p-6 shadow-2xl">
+                        <h3 className="font-['Syne'] text-xl font-bold text-text0">🛟 Rescue Deck</h3>
+                        <p className="mt-2 text-sm text-text1 leading-relaxed">
+                            Prepare the presentation for{' '}
+                            <span className="font-mono text-amber">
+                                {rescueDialog.team?.sessionCode || 'this team'}
+                            </span>{' '}
+                            on their behalf?
+                        </p>
+                        <div className="mt-3 rounded-xl border border-amber/20 bg-amber/5 px-4 py-3 text-xs text-amber/80 leading-relaxed space-y-1">
+                            <p>• Generates detailed notes explaining the mission failure mode, what broke, and the core ML concept</p>
+                            <p>• Marks the deck as <span className="font-bold">submitted</span> so it appears ready in the projector view</p>
+                            <p>• Based on the team&apos;s best run data ({rescueDialog.team?.runsUsed ?? 0} runs, best acc {((rescueDialog.team?.bestAccuracy || 0) * 100).toFixed(1)}%)</p>
+                            <p>• You can still edit the notes in the presentation screen after rescue</p>
+                        </div>
+                        <div className="mt-5 flex items-center justify-end gap-2">
+                            <button
+                                type="button"
+                                onClick={closeRescueDialog}
+                                className="rounded-lg border border-white/20 bg-bg2 px-3 py-2 text-xs uppercase tracking-wider text-text1 hover:bg-bg3"
+                            >
+                                Cancel
+                            </button>
+                            <button
+                                type="button"
+                                onClick={() => handleRescueDeck(rescueDialog.team)}
+                                disabled={rescuingTeamId === rescueDialog.team?.id}
+                                className="rounded-lg border border-amber/50 bg-amber/20 px-4 py-2 text-xs font-bold uppercase tracking-wider text-amber hover:bg-amber/30 disabled:opacity-50"
+                            >
+                                {rescuingTeamId === rescueDialog.team?.id ? 'Preparing rescue deck…' : 'Yes, prepare rescue deck'}
                             </button>
                         </div>
                     </div>

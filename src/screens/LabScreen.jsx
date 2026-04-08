@@ -258,7 +258,7 @@ function LabScreen() {
 		<main className="min-h-screen bg-bg0 text-text0 bg-[radial-gradient(ellipse_at_top_right,_var(--tw-gradient-stops))] from-bg2 via-bg0 to-bg0">
 			<header className="fixed left-0 right-0 top-0 z-20 flex h-[60px] items-center justify-between border-b border-white/5 bg-bg1/70 backdrop-blur-xl px-4 shadow-sm">
 				<div className="bg-gradient-to-r from-accent to-accent2 bg-clip-text font-['Syne'] text-xl font-bold text-transparent">
-					LossLab
+					Tune CNN
 				</div>
 
 				<div className="rounded-full border border-white/10 bg-white/5 py-1 px-4 text-xs text-text1 shadow-[inset_0_2px_10px_rgba(0,0,0,0.2)] backdrop-blur-md flex items-center gap-2">

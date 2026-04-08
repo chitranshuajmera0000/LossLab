@@ -10,6 +10,12 @@ export default function applyInteractions(params, config) {
     params.noiseScale *= 2.5
   }
 
+  // 1b. Bug 2 fix: sgd + lr>=1.0 → force explode regardless of batch size
+  if (optimizer === 'sgd' && lr >= 1.0) {
+    params.explode = true
+    params.explodeEpoch = Math.min(params.explodeEpoch, 3)
+  }
+
   // 2. sigmoid + layers>4 → vanishing=true, Lfloor=max(1.6,Lfloor)
   if (activation === 'sigmoid' && layers > 4) {
     params.vanishing = true
@@ -40,6 +46,13 @@ export default function applyInteractions(params, config) {
   if (batchSize === 1 && lr > 0.1) {
     params.noiseScale *= 5
     params.explode = true
+  }
+
+  // 7b. Bug 3 fix: batchSize=8 + lr>=1.0 + sgd → also explodes
+  if (batchSize === 8 && lr >= 1.0 && optimizer === 'sgd') {
+    params.noiseScale *= 3
+    params.explode = true
+    params.explodeEpoch = Math.min(params.explodeEpoch, 4)
   }
 
   // 8. relu + he + batchSize=32 + adam → Lfloor*=0.75 (golden config bonus)

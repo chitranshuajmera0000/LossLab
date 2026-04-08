@@ -20,8 +20,8 @@ export const MISSIONS = [
     stretchGoal: 'Val accuracy > 90% — all four params must be tuned as a system, not independently',
     winThreshold: 0.82,
     stretchThreshold: 0.9,
-    winFn: (r) => r.finalAccuracy > 0.82 && !r.diverged,
-    stretchFn: (r) => r.finalAccuracy > 0.9 && !r.diverged,
+    winFn: (r) => r.finalAccuracy > 0.82 && !r.diverged && r.config?.batchSize >= 32 && r.config?.lr < 1.0,
+    stretchFn: (r) => r.finalAccuracy > 0.9 && !r.diverged && r.config?.batchSize >= 32 && r.config?.lr < 1.0,
     stages: [
       { runThreshold: 0, message: 'The curve is going up. Before you touch anything: what does a rising loss curve usually mean? What is the model doing wrong on each step?' },
       { runThreshold: 3, message: 'If your first fix stabilized the curve but accuracy is still stuck — instability was only one of the problems. What else could prevent a stable model from learning?' },

@@ -85,7 +85,7 @@ export function generateInsight(config, result, missionConfig = {}) {
     )
   }
 
-  if (result.plateauEpoch !== null) {
+  if (result.plateauEpoch != null) {
     return withMissionPrompt(
       missionId,
       'plateau',
@@ -163,7 +163,7 @@ export default function generateDiagnostics(config, result, missionConfig = {}) 
     )
   }
 
-  if (result.plateauEpoch !== null) {
+  if (result.plateauEpoch != null) {
     diagnostics.push(
       makeDiagnostic(
         'warn',

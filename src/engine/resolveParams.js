@@ -21,7 +21,7 @@ export default function resolveParams(config, rng = Math.random) {
 
   // LEARNING RATE MAPPINGS
   const { lr } = config
-  if (lr > 2.0) {
+  if (lr >= 1.5) {
     params.explode = true
     params.explodeEpoch = Math.floor(rng() * 4 + 2) // rand(2,5)
     params.noiseScale *= 3
@@ -52,6 +52,11 @@ export default function resolveParams(config, rng = Math.random) {
     params.decay *= 0.55
     params.noiseScale *= 2.2
     params.Lfloor *= 1.1
+    // SGD + small batch: non-adaptive updates can't overcome high gradient variance.
+    // Raise Lfloor so accuracy can't cross win threshold without fixing batchSize too.
+    if (config.batchSize < 32) {
+      params.Lfloor = Math.max(params.Lfloor, 0.55) // blocks ~acc > 0.80 ceiling
+    }
   }
 
   // ACTIVATION MAPPINGS (only apply when layers >= 4)
@@ -111,13 +116,15 @@ export default function resolveParams(config, rng = Math.random) {
   }
 
   // BATCH SIZE MAPPINGS
+  // Bug 4 fix: small batch sizes prevent full convergence — Adam's adaptive
+  // rates can't fully cancel batch noise without a large batch.
   const { batchSize } = config
   if (batchSize === 1) {
     params.noiseMultiplier = 4.0
-    params.Lfloor *= 0.95
+    params.Lfloor = Math.max(params.Lfloor, 0.48) // floor: acc won't exceed ~0.82 without batch fix
   } else if (batchSize === 8) {
     params.noiseMultiplier = 2.0
-    params.Lfloor *= 0.93
+    params.Lfloor = Math.max(params.Lfloor, 0.25) // softer floor for batch=8
   } else if (batchSize === 32) {
     params.noiseMultiplier = 1.0
   } else if (batchSize === 128) {

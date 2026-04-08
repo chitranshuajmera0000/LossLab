@@ -15,9 +15,12 @@
 
 import simulateFallback from './simulate.js'
 
-// Lazy loaders — JSON only fetched when that mission is first played
+// Lazy loaders — JSON only fetched when that mission is first played.
+// NOTE: 'exploder' (Mission 1) intentionally excluded — the parametric engine
+// enforces the correct failure modes (sgd+small-batch must fail without fixing
+// all 3 params). Real Kaggle data shows low-LR configs converging regardless
+// of batch size, which breaks the pedagogical requirement.
 const LOADERS = {
-  exploder: () => import('../data/exploder_curves.json'),
   flatliner: () => import('../data/flatliner_curves.json'),
   memorizer: () => import('../data/memorizer_curves.json'),
   slowlearner: () => import('../data/slowlearner_curves.json'),
@@ -73,7 +76,7 @@ function makeKey(config, defaultConfig) {
   return keyStr
 }
 
-function deriveResult(tl, vl, ac, missionId) {
+function deriveResult(tl, vl, ac, missionId, config) {
   const epochs = tl.length
   const finalTrainLoss = tl[epochs - 1]
   const finalValLoss = vl[epochs - 1]
@@ -95,6 +98,7 @@ function deriveResult(tl, vl, ac, missionId) {
     diverged, vanished: flatlined, overfit: gap > 0.12, flatlined,
     plateauEpoch, bestTrainLoss, rescuedEpoch: null,
     missionId: missionId ?? null,
+    config: config ?? null,
     params: {
       L0: tl[0], Lfloor: bestTrainLoss, decay: 0.08,
       noiseScale: 0.04, noiseMultiplier: 1.0,
@@ -114,22 +118,27 @@ function deriveResult(tl, vl, ac, missionId) {
 // Main export — async, signature matches simulate(config, missionConfig)
 export async function lookupCurve(config, missionConfig = {}) {
   const missionId = missionConfig?.id
-  if (!missionId || !LOADERS[missionId]) return simulateFallback(config, missionConfig)
+  if (!missionId || !LOADERS[missionId]) {
+    const r = simulateFallback(config, missionConfig)
+    return { ...r, config }
+  }
 
   const data = await loadData(missionId)
   if (!data) {
     console.warn(`[curveLookup] No data for "${missionId}", using simulate()`)
-    return simulateFallback(config, missionConfig)
+    const r = simulateFallback(config, missionConfig)
+    return { ...r, config }
   }
 
   const key = makeKey(config, missionConfig.defaultConfig ?? {})
   const entry = data[key]
   if (!entry) {
     console.warn(`[curveLookup] Key miss for "${missionId}" (lr→${snapLR(config.lr)}), using simulate()`)
-    return simulateFallback(config, missionConfig)
+    const r = simulateFallback(config, missionConfig)
+    return { ...r, config }
   }
 
-  return deriveResult(entry.tl, entry.vl, entry.ac, missionId)
+  return deriveResult(entry.tl, entry.vl, entry.ac, missionId, config)
 }
 
 // Preload a mission's JSON before first run — call on session join

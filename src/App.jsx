@@ -3,6 +3,7 @@ import JoinScreen from './screens/JoinScreen'
 import LabScreen from './screens/LabScreen'
 import PresentScreen from './screens/PresentScreen'
 import ProjectorPresentScreen from './screens/ProjectorPresentScreen'
+import RescuePresentScreen from './screens/RescuePresentScreen'
 import FeedScreen from './screens/FeedScreen'
 import AdminScreen from './screens/AdminScreen'
 import { useSession } from './hooks/useSession'
@@ -54,6 +55,7 @@ function App() {
         </ProtectedRoute>
       } />
       <Route path="/project" element={<ProjectorPresentScreen />} />
+      <Route path="/rescue" element={<RescuePresentScreen />} />
       <Route path="/feed" element={
         <ProtectedRoute requireSessionParam>
           <FeedScreen />

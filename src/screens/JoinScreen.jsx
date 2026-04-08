@@ -51,7 +51,7 @@ export default function JoinScreen() {
 				{/* Header */}
 				<div className="mb-8 text-center">
 					<div className="mb-2 bg-gradient-to-r from-accent to-accent2 bg-clip-text font-['Syne'] text-4xl font-bold text-transparent">
-						LossLab
+						Tune CNN
 					</div>
 					<div className="text-text2 text-sm">Enter your session code to begin</div>
 				</div>

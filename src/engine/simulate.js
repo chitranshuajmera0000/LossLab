@@ -215,6 +215,7 @@ export default function simulate(config, missionConfig = {}) {
     overfit: gap > 0.12,
     flatlined: params.flatline,
     params,
+    config,
     epochs,
     missionId: missionConfig.id || null,
     bestTrainLoss: bestLoss,

@@ -18,6 +18,7 @@ export default function PresentationDeck({
     bestRun,
     notes,
     onBackToLab,
+    hideBadges = false,
 }) {
     const initialConfig = allRuns.length > 0 ? allRuns[0]?.config : null
     /** fullScore may be missing on edge-case rows; fall back to score */
@@ -132,7 +133,7 @@ export default function PresentationDeck({
                     </div>
                 </div>
 
-                {finalBadges.length > 0 && (
+                {!hideBadges && finalBadges.length > 0 && (
                     <div className="min-w-0 max-w-full overflow-hidden rounded-xl border border-border bg-bg2 p-5 md:p-6">
                         <h3 className="mb-4 text-center text-[14px] font-semibold uppercase tracking-[0.14em] text-text2 md:text-[15px] xl:text-left">
                             Badges Unlocked
