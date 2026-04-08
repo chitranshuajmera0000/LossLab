@@ -67,6 +67,9 @@ function AdminScreen() {
     const [runs, setRuns] = useState([])
     const [presentations, setPresentations] = useState([])
     const [sessions, setSessions] = useState([])
+    const [resettingTeamId, setResettingTeamId] = useState(null)
+    const [resetDialog, setResetDialog] = useState({ open: false, team: null })
+    const [resetFeedback, setResetFeedback] = useState(null)
     const [syncStatus, setSyncStatus] = useState('connecting')
     const [lastSyncAt, setLastSyncAt] = useState(null)
 
@@ -92,6 +95,103 @@ function AdminScreen() {
         setPresentations([])
         setSessions([])
     }
+
+    const handleResetRuns = async (team) => {
+        if (!team?.id) return
+        const targetSessionCode = team.sessionCode || team.name
+        if (!targetSessionCode) {
+            setResetFeedback({ type: 'error', text: 'Missing session code for reset' })
+            return
+        }
+
+        setResettingTeamId(team.id)
+        try {
+            // 1) Remove FK references to runs before deleting runs.
+            const { error: presResetErr } = await supabase
+                .from('presentations')
+                .update({
+                    is_submitted: false,
+                    is_presenting: false,
+                    submitted_at: null,
+                    best_run_id: null,
+                })
+                .eq('session_code', targetSessionCode)
+            if (presResetErr) throw presResetErr
+
+            // 2) Delete dependent badges and runs for this session code.
+            const { error: badgesErr } = await supabase
+                .from('badges')
+                .delete()
+                .eq('session_code', targetSessionCode)
+            if (badgesErr) throw badgesErr
+
+            const { error: runsErr } = await supabase
+                .from('runs')
+                .delete()
+                .eq('session_code', targetSessionCode)
+            if (runsErr) throw runsErr
+
+            // 3) Reset run counters for all team rows mapped to this session code.
+            const { error: teamErr } = await supabase
+                .from('teams')
+                .update({ run_count: 0 })
+                .eq('session_code', targetSessionCode)
+            if (teamErr) throw teamErr
+
+            setRuns((prev) => prev.filter((r) => r.session_code !== targetSessionCode))
+            setTeams((prev) =>
+                prev.map((t) =>
+                    t.session_code === targetSessionCode ? { ...t, run_count: 0 } : t,
+                ),
+            )
+            setPresentations((prev) =>
+                prev.map((p) =>
+                    p.session_code === targetSessionCode
+                        ? { ...p, is_submitted: false, is_presenting: false, submitted_at: null, best_run_id: null }
+                        : p,
+                ),
+            )
+
+            // Force-refresh from DB to avoid stale UI if realtime lags.
+            const [sessionsRes, teamsRes, runsRes, presRes] = await Promise.all([
+                supabase.from('sessions').select('*').in('session_code', TEAM_CODES),
+                supabase.from('teams').select('*').in('session_code', TEAM_CODES),
+                supabase.from('runs').select('*').in('session_code', TEAM_CODES).order('run_number', { ascending: true }),
+                supabase.from('presentations').select('*').in('session_code', TEAM_CODES),
+            ])
+            setSessions(sessionsRes.data || [])
+            setTeams(teamsRes.data || [])
+            setRuns(runsRes.data || [])
+            setPresentations(presRes.data || [])
+
+            setLastSyncAt(new Date())
+            setResetFeedback({ type: 'success', text: `Runs reset for ${targetSessionCode}.` })
+        } catch (err) {
+            setResetFeedback({ type: 'error', text: err?.message || 'Failed to reset runs' })
+        } finally {
+            setResettingTeamId(null)
+        }
+    }
+
+    const openResetDialog = (team) => {
+        setResetDialog({ open: true, team })
+    }
+
+    const closeResetDialog = () => {
+        setResetDialog({ open: false, team: null })
+    }
+
+    const confirmResetDialog = async () => {
+        const team = resetDialog.team
+        closeResetDialog()
+        if (team) await handleResetRuns(team)
+    }
+
+    useEffect(() => {
+        if (!resetFeedback) return undefined
+        const timer = setTimeout(() => setResetFeedback(null), 2600)
+        return () => clearTimeout(timer)
+    }, [resetFeedback])
 
     useEffect(() => {
         let active = true
@@ -203,10 +303,6 @@ function AdminScreen() {
                     setSyncStatus('polling')
                 } else if (status === 'CONNECTING') {
                     setSyncStatus('connecting')
-                }
-                if (import.meta.env.DEV && status !== 'SUBSCRIBED') {
-                    // eslint-disable-next-line no-console
-                    console.warn('[Admin realtime]', status)
                 }
             })
             channelRef.current = channel
@@ -687,6 +783,14 @@ function AdminScreen() {
                                             <div className="flex flex-wrap gap-2 mt-1">
                                                 <button
                                                     type="button"
+                                                    onClick={() => openResetDialog(team)}
+                                                    disabled={resettingTeamId === team.id}
+                                                    className="text-[10px] uppercase font-bold tracking-wider rounded-lg bg-red/15 text-red border border-red/40 px-3 py-1.5 hover:bg-red/25 transition disabled:opacity-50"
+                                                >
+                                                    {resettingTeamId === team.id ? 'Resetting...' : 'Reset runs'}
+                                                </button>
+                                                <button
+                                                    type="button"
                                                     onClick={() => {
                                                         const url = `${window.location.origin}/project?team=${encodeURIComponent(team.id)}`
                                                         window.open(url, '_blank', 'noopener,noreferrer')
@@ -718,6 +822,55 @@ function AdminScreen() {
                     })}
                 </div>
             </section>
+
+            {resetFeedback && (
+                <div className="pointer-events-none fixed bottom-6 right-6 z-40">
+                    <div
+                        className={`rounded-xl border px-4 py-3 text-sm font-mono shadow-xl ${
+                            resetFeedback.type === 'success'
+                                ? 'border-green/40 bg-green/10 text-green'
+                                : 'border-red/40 bg-red/10 text-red'
+                        }`}
+                    >
+                        {resetFeedback.text}
+                    </div>
+                </div>
+            )}
+
+            {resetDialog.open && (
+                <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4 backdrop-blur-sm">
+                    <div className="w-full max-w-md rounded-2xl border border-red/30 bg-bg1 p-5 shadow-2xl">
+                        <h3 className="font-['Syne'] text-xl font-bold text-text0">Reset Team Runs</h3>
+                        <p className="mt-2 text-sm text-text1 leading-relaxed">
+                            Reset all run history for{' '}
+                            <span className="font-mono text-red">
+                                {resetDialog.team?.sessionCode || resetDialog.team?.name || 'this session'}
+                            </span>
+                            ?
+                        </p>
+                        <p className="mt-2 text-xs text-text2">
+                            This removes runs and badges, clears submitted presentation state, and sets run count back to 0.
+                        </p>
+
+                        <div className="mt-5 flex items-center justify-end gap-2">
+                            <button
+                                type="button"
+                                onClick={closeResetDialog}
+                                className="rounded-lg border border-white/20 bg-bg2 px-3 py-2 text-xs uppercase tracking-wider text-text1 hover:bg-bg3"
+                            >
+                                Cancel
+                            </button>
+                            <button
+                                type="button"
+                                onClick={confirmResetDialog}
+                                className="rounded-lg border border-red/50 bg-red/20 px-3 py-2 text-xs font-bold uppercase tracking-wider text-red hover:bg-red/30"
+                            >
+                                Confirm Reset
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            )}
         </main>
     )
 }
