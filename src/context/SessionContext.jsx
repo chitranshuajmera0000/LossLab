@@ -14,7 +14,7 @@ export function SessionProvider({ children }) {
   const [mission, setMission] = useState(null)
   const [isLoading, setIsLoading] = useState(false)
   const [isRestoring, setIsRestoring] = useState(true)
-  const [error, setError] = useState(null)
+  const [error, setError] = useState(null) 
 
   /**
    * Join an existing session using session code only (one team row per session code).
