@@ -6,7 +6,6 @@ import { toast } from 'react-hot-toast'
 import Leaderboard from '../components/feed/Leaderboard'
 import TeamCard from '../components/feed/TeamCard'
 import CompareOverlay from '../components/feed/CompareOverlay'
-import SessionTimer from '../components/feed/SessionTimer'
 
 function FeedScreen() {
 	const [searchParams] = useSearchParams()
@@ -26,8 +25,6 @@ function FeedScreen() {
 		presentingTeamId,
 		submittedCount,
 		totalTeams,
-		timerStart,
-		durationMinutes,
 		teamMap,
 		realtimeStatus,
 		reconnectRealtime,
@@ -139,7 +136,6 @@ function FeedScreen() {
 						</button>
 					</div>
 					<span className="text2 text-sm">{submittedCount} / {totalTeams} submitted</span>
-					<SessionTimer timerStart={timerStart} durationMinutes={durationMinutes} />
 				</div>
 			</header>
 

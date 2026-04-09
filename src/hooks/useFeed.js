@@ -276,20 +276,6 @@ export function useFeed(sessionCode) {
   const dataset = mission ? { name: mission.dataset } : null
   const totalTeams = canonicalTeams.length
   const submittedCount = canonicalTeams.filter((team) => bestRuns[team.id]).length
-  const timerStart = sessionData?.created_at || sessionData?.started_at || null
-  const storedSession = (() => {
-    try {
-      return JSON.parse(localStorage.getItem('losslab_session') || 'null')
-    } catch {
-      return null
-    }
-  })()
-  const durationMinutes =
-    sessionData?.duration_minutes ??
-    sessionData?.duration ??
-    (storedSession?.sessionCode === sessionCode ? storedSession?.sessionDuration : null) ??
-    mission?.timeLimit ??
-    null
   const toggleRevealMode = async () => {
     if (!sessionCode || !sessionData) return { error: 'No active session' }
     const nextRevealMode = !(sessionData.reveal_mode ?? false)
@@ -325,8 +311,6 @@ export function useFeed(sessionCode) {
     presentingTeamId,
     submittedCount,
     totalTeams,
-    timerStart,
-    durationMinutes,
     teamMap,
     realtimeStatus,
     reconnectRealtime,

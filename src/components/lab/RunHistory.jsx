@@ -37,7 +37,7 @@ function RunHistory({ allRuns = [], onSelectRun, selectedRunIndex = -1 }) {
 	const latestTen = allRuns.slice(-10).reverse()
 
 	return (
-		<aside className="h-[50vh] overflow-y-auto rounded-2xl border border-white/10 bg-bg1/40 backdrop-blur-xl p-3 flex flex-col shadow-lg">
+		<aside className="h-[68vh] overflow-y-auto rounded-2xl border border-white/10 bg-bg1/40 backdrop-blur-xl p-3 flex flex-col shadow-lg">
 			<div className="px-1 pb-2 text-[11px] uppercase tracking-[0.1em] text-text2">Run History</div>
 			{allRuns.length === 0 ? (
 				<div className="flex-1 flex flex-col items-center justify-center text-center text-text2 py-8">

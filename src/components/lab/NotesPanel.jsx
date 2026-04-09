@@ -10,7 +10,7 @@ function Field({ label, keyName, colorClass, placeholder, notes, onNotesChange, 
 				readOnly={readOnly}
 				onChange={(e) => onNotesChange(keyName, e.target.value)}
 				placeholder={placeholder}
-				className="mt-1.5 h-[90px] w-full resize-none rounded-lg border border-white/10 bg-black/20 p-2 text-[13px] leading-5 text-text0 outline-none transition duration-300 focus:border-accent focus:bg-black/40 focus:shadow-[0_0_10px_rgba(34,211,238,0.2)]"
+				className="mt-1.5 h-[160px] w-full resize-y rounded-lg border border-white/10 bg-black/20 p-3 text-sm leading-6 text-text0 outline-none transition duration-300 focus:border-accent focus:bg-black/40 focus:shadow-[0_0_10px_rgba(34,211,238,0.2)]"
 			/>
 			<div className={`mt-1 text-right text-[10px] ${value.trim().length > 20 ? 'text-green-400' : 'text-text2/60'}`}>
 				{value.length} / 21 chars
@@ -21,10 +21,10 @@ function Field({ label, keyName, colorClass, placeholder, notes, onNotesChange, 
 
 function NotesPanel({ notes, onNotesChange, onSubmit, isSubmitted, canSubmit, onEdit }) {
 	return (
-		<section className="rounded-2xl border border-white/10 bg-bg1/40 backdrop-blur-xl p-3 shadow-lg">
+		<section className="rounded-2xl border border-white/10 bg-bg1/40 backdrop-blur-xl p-4 shadow-lg">
 			<div className="mb-2 text-[11px] uppercase tracking-[0.1em] text-text2">Presentation Notes</div>
 
-			<div className="space-y-2">
+			<div className="grid grid-cols-1 gap-3 xl:grid-cols-3">
 				<Field
 					label="Our Approach"
 					keyName="approach"

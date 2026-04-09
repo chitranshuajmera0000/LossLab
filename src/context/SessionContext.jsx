@@ -116,7 +116,6 @@ export function SessionProvider({ children }) {
         JSON.stringify({
           sessionCode: code,
           missionId,
-          sessionDuration: duration,
         }),
       )
 

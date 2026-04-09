@@ -354,14 +354,6 @@ function LabScreen() {
 							{insight}
 						</div>
 					)}
-				</section>
-
-				<section className="flex w-[220px] shrink-0 flex-col gap-3">
-					<RunHistory
-						allRuns={allRuns}
-						onSelectRun={setSelectedRunIndex}
-						selectedRunIndex={selectedRunIndex}
-					/>
 					<NotesPanel
 						notes={notes}
 						onNotesChange={(key, value) => setNotes((prev) => ({ ...prev, [key]: value }))}
@@ -369,6 +361,14 @@ function LabScreen() {
 						isSubmitted={isSubmitted}
 						canSubmit={canSubmitNotes}
 						onEdit={() => setIsSubmitted(false)}
+					/>
+				</section>
+
+				<section className="flex w-[280px] shrink-0 flex-col gap-3">
+					<RunHistory
+						allRuns={allRuns}
+						onSelectRun={setSelectedRunIndex}
+						selectedRunIndex={selectedRunIndex}
 					/>
 				</section>
 			</div>
