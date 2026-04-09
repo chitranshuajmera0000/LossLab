@@ -63,12 +63,12 @@ export const MISSIONS = [
     dataset: 'Concentric Rings — 3 classes, 600 points',
     description:
       'Accuracy has been at 33% for 20 epochs. Loss is barely moving. The optimizer is fine, the learning rate is reasonable, the architecture looks normal on paper. Yet the network is essentially doing nothing. Something upstream of the gradient update is broken — the signal is disappearing before it can do any work. You have four parameters to investigate. The first thing you fix will probably reveal that there was a second problem hiding underneath it.',
-    winCondition: 'Val accuracy > 80%',
-    stretchGoal: 'Val accuracy > 88% — requires understanding why each of the three failures is a separate problem',
-    winThreshold: 0.8,
-    stretchThreshold: 0.88,
-    winFn: (r) => r.finalAccuracy > 0.8,
-    stretchFn: (r) => r.finalAccuracy > 0.88,
+    winCondition: 'Val accuracy > 83% with no flatline/vanish failure',
+    stretchGoal: 'Val accuracy > 90% with stable learning — requires resolving all hidden failures',
+    winThreshold: 0.83,
+    stretchThreshold: 0.9,
+    winFn: (r) => r.finalAccuracy > 0.83 && !r.flatlined && !r.vanished,
+    stretchFn: (r) => r.finalAccuracy > 0.9 && !r.flatlined && !r.vanished,
     stages: [
       { runThreshold: 0, message: 'Every neuron has identical weights and produces identical outputs. What does backpropagation compute when all activations are the same?' },
       { runThreshold: 2, message: 'The curve is moving now but still not learning effectively. Is this the same problem as before, or a different one that was hiding?' },

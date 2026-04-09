@@ -4,6 +4,7 @@ import calculateScore from '../engine/scoring.js'
 import { MISSIONS } from '../missions/missions.js'
 import { LAB_TEAM_SESSION_CODES, getMissionForLabSessionCode } from '../config/labSessions.js'
 import simulate from '../engine/simulate.js'
+import { normalizeAccuracy, normalizeScore } from '../utils/metricsNormalization.js'
 
 const TEAM_CODES = LAB_TEAM_SESSION_CODES
 
@@ -535,7 +536,7 @@ function AdminScreen() {
                 const missionObj = getMissionForLabSessionCode(team.session_code) ?? getMission(null)
 
                 const processedRuns = []
-                let highestScore = 0
+                let highestScore = Number.NEGATIVE_INFINITY
                 let bestAccuracy = 0
                 let allBadges = []
                 let lastRunAt = null
@@ -546,7 +547,7 @@ function AdminScreen() {
                         trainLoss: r.train_loss || [],
                         valLoss: r.val_loss || [],
                         accuracy: r.accuracy || [],
-                        finalAccuracy: r.final_accuracy || 0,
+                        finalAccuracy: normalizeAccuracy(r.final_accuracy || 0),
                         finalTrainLoss: r.final_train_loss || 0,
                         finalValLoss: r.final_val_loss || 0,
                         diverged: r.diverged || false,
@@ -556,11 +557,12 @@ function AdminScreen() {
                         epochs: Array.isArray(r.train_loss) ? r.train_loss.length : 0,
                     }
                     const nextScore = calculateScore(r.config, resultObj, processedRuns, missionObj)
-                    processedRuns.push({ ...r, result: resultObj, fullScore: nextScore })
+                    const achievedScore = normalizeScore(r.score ?? nextScore.total)
+                    processedRuns.push({ ...r, result: resultObj, fullScore: nextScore, achievedScore })
 
-                    if (nextScore.total > highestScore) {
-                        highestScore = nextScore.total
-                        bestRunPayload = { run: r, resultObj, fullScore: nextScore }
+                    if (achievedScore > highestScore) {
+                        highestScore = achievedScore
+                        bestRunPayload = { run: r, resultObj, fullScore: nextScore, achievedScore }
                     }
                     if (resultObj.finalAccuracy > bestAccuracy) bestAccuracy = resultObj.finalAccuracy
 
@@ -575,7 +577,7 @@ function AdminScreen() {
 
                 const runsForMission = teamRuns.map((r) => ({
                     config: r.config,
-                    finalAccuracy: r.final_accuracy || 0,
+                    finalAccuracy: normalizeAccuracy(r.final_accuracy || 0),
                 }))
                 const bestResult = bestRunPayload?.resultObj
                 const missionWon =
@@ -603,7 +605,7 @@ function AdminScreen() {
                     name: team.session_code || team.team_name,
                     sessionCode: team.session_code,
                     runsUsed: teamRuns.length,
-                    highestScore,
+                    highestScore: Number.isFinite(highestScore) ? highestScore : 0,
                     bestAccuracy,
                     badges: allBadges,
                     isReady,

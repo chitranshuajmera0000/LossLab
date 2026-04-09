@@ -29,7 +29,7 @@ function getMissionProfile(missionConfig = {}) {
     case 'exploder':
       return { warmup: 2, core: 0.9, fineTune: 0.55, plateauThreshold: 0.012, rescueBoost: 0.7 }
     case 'flatliner':
-      return { warmup: 3, core: 0.8, fineTune: 0.5, plateauThreshold: 0.01, rescueBoost: 0.6 }
+      return { warmup: 3, core: 0.72, fineTune: 0.45, plateauThreshold: 0.008, rescueBoost: 0.55 }
     case 'memorizer':
       return { warmup: 2, core: 1.0, fineTune: 0.7, plateauThreshold: 0.009, rescueBoost: 0.65 }
     case 'slowlearner':
@@ -93,13 +93,23 @@ function applyMissionDifficulty(params, config, missionConfig = {}) {
   if (missionId === 'flatliner') {
     if (!['he', 'xavier'].includes(config.init)) {
       params.flatline = params.flatline || config.init === 'zeros'
-      params.decay *= 0.75
-      params.Lfloor = Math.max(params.Lfloor, 0.95)
+      params.decay *= 0.62
+      params.Lfloor = Math.max(params.Lfloor, 1.05)
+      params.noiseScale *= 1.15
     }
     if (!['relu', 'leaky', 'elu'].includes(config.activation)) {
       params.vanishing = true
-      params.Lfloor = Math.max(params.Lfloor, 1.05)
-      params.decay *= 0.65
+      params.Lfloor = Math.max(params.Lfloor, 1.18)
+      params.decay *= 0.55
+    }
+    if ((config.layers || 0) >= 7 && !['relu', 'leaky', 'elu'].includes(config.activation)) {
+      params.vanishing = true
+      params.Lfloor = Math.max(params.Lfloor, 1.28)
+      params.decay *= 0.78
+    }
+    if (config.init === 'he' && !['relu', 'leaky', 'elu'].includes(config.activation)) {
+      params.Lfloor *= 1.06
+      params.noiseScale *= 1.1
     }
   }
 
