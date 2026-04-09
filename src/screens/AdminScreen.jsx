@@ -3,7 +3,7 @@ import { supabase } from '../lib/supabase.js'
 import calculateScore from '../engine/scoring.js'
 import { MISSIONS } from '../missions/missions.js'
 import { LAB_TEAM_SESSION_CODES, getMissionForLabSessionCode } from '../config/labSessions.js'
-import { lookupCurve } from '../engine/curveLookup.js'
+import simulate from '../engine/simulate.js'
 
 const TEAM_CODES = LAB_TEAM_SESSION_CODES
 
@@ -320,7 +320,7 @@ function AdminScreen() {
 
             const winOveride = WINNING_CONFIGS[missionObj.id] || {}
             const cfg = { ...(missionObj.defaultConfig || {}), ...winOveride }
-            const simResult = await lookupCurve(cfg, missionObj)
+            const simResult = simulate(cfg, missionObj)
             const syntheticRun = {
                 id: 'synthetic-run-1',
                 team_id: team.id,

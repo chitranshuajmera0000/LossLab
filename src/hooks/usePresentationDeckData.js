@@ -3,6 +3,7 @@ import { supabase } from '../lib/supabase.js'
 import calculateScore from '../engine/scoring.js'
 import { MISSIONS } from '../missions/missions.js'
 import { getMissionForLabSessionCode } from '../config/labSessions.js'
+import { normalizeAccuracy, normalizeScore, normalizeSeries } from '../utils/metricsNormalization.js'
 
 export function processRunsForMission(runsData, mission) {
     const processedRuns = []
@@ -10,8 +11,8 @@ export function processRunsForMission(runsData, mission) {
         const resultObj = {
             trainLoss: r.train_loss || [],
             valLoss: r.val_loss || [],
-            accuracy: r.accuracy || [],
-            finalAccuracy: r.final_accuracy || 0,
+            accuracy: normalizeSeries(r.accuracy || []),
+            finalAccuracy: normalizeAccuracy(r.final_accuracy || 0),
             finalTrainLoss: r.final_train_loss || 0,
             finalValLoss: r.final_val_loss || 0,
             diverged: r.diverged || false,
@@ -22,9 +23,11 @@ export function processRunsForMission(runsData, mission) {
         }
         const nextScore = mission
             ? calculateScore(r.config, resultObj, processedRuns, mission)
-            : { total: r.score, breakdown: [], badges: [], scoreBreakdownLabels: [] }
+            : { total: normalizeScore(r.score), breakdown: [], badges: [], scoreBreakdownLabels: [] }
         processedRuns.push({
             ...r,
+            final_accuracy: normalizeAccuracy(r.final_accuracy || 0),
+            score: normalizeScore(r.score),
             result: resultObj,
             fullScore: nextScore,
         })

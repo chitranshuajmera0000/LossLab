@@ -3,6 +3,7 @@ import { createContext, useContext, useMemo, useState, useCallback, useEffect } 
 import { supabase, generateSessionCode } from '../lib/supabase.js'
 import { getMission } from '../missions/index.js'
 import { getMissionIdForLabSessionCode } from '../config/labSessions.js'
+import { normalizeAccuracy, normalizeScore, normalizeSeries } from '../utils/metricsNormalization.js'
 
 const SessionContext = createContext(null)
 
@@ -183,11 +184,11 @@ export function SessionProvider({ children }) {
         config: runData.config,
         train_loss: runData.trainLoss ?? [],
         val_loss: runData.valLoss ?? [],
-        accuracy: runData.accuracy ?? [],
+        accuracy: normalizeSeries(runData.accuracy ?? []),
         final_train_loss: runData.finalTrainLoss ?? 0,
         final_val_loss: runData.finalValLoss ?? 0,
-        final_accuracy: runData.finalAccuracy ?? 0,
-        score: runData.score ?? 0,
+        final_accuracy: normalizeAccuracy(runData.finalAccuracy ?? 0),
+        score: normalizeScore(runData.score ?? 0),
         diverged: runData.diverged ?? false,
         vanished: runData.vanished ?? false,
         overfit: runData.overfit ?? false,

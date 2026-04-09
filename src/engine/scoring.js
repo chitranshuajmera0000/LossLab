@@ -1,3 +1,5 @@
+import { normalizeAccuracy, normalizeScore } from '../utils/metricsNormalization.js'
+
 function clamp(value, min, max) {
   return Math.max(min, Math.min(max, value))
 }
@@ -32,15 +34,16 @@ function getMissionBonus(missionId, result, config, allRuns) {
 }
 
 export default function calculateScore(config, result, allRuns = [], missionConfig = {}) {
-  const { finalAccuracy, diverged, vanished, flatlined, trainLoss } = result
+  const safeFinalAccuracy = normalizeAccuracy(result?.finalAccuracy)
+  const { diverged, vanished, flatlined, trainLoss } = result
   const gap = result.finalValLoss - result.finalTrainLoss
   const missionId = missionConfig.id || 'default'
   const runCount = allRuns.length + 1
-  const runsIncludingCurrent = [...allRuns, { config, finalAccuracy }]
-  const previousBestAccuracy = allRuns.reduce((best, run) => Math.max(best, run.finalAccuracy || 0), 0)
+  const runsIncludingCurrent = [...allRuns, { config, finalAccuracy: safeFinalAccuracy }]
+  const previousBestAccuracy = allRuns.reduce((best, run) => Math.max(best, normalizeAccuracy(run.finalAccuracy || 0)), 0)
   const previousBadges = allRuns.reduce((acc, run) => acc.concat(run.badges || []), [])
 
-  const accuracyPoints = Math.round(finalAccuracy * 1000)
+  const accuracyPoints = Math.round(safeFinalAccuracy * 1000)
   const stabilityBonus = diverged || flatlined ? 0 : Math.round((1 - clamp(gap, 0, 1)) * 120)
 
   const firstConvergedEpoch = getFirstThresholdEpoch(trainLoss, 0.8)
@@ -50,7 +53,7 @@ export default function calculateScore(config, result, allRuns = [], missionConf
   const stretchBonus = typeof missionConfig.stretchFn === 'function' && missionConfig.stretchFn(result, runsIncludingCurrent) ? 400 : 0
   const gapPenalty = gap > 0.08 ? Math.round(-260 * (gap - 0.08)) : 0
 
-  const total = accuracyPoints + stabilityBonus + speedBonus + explorationBonus + missionBonus + stretchBonus + gapPenalty
+  const total = normalizeScore(accuracyPoints + stabilityBonus + speedBonus + explorationBonus + missionBonus + stretchBonus + gapPenalty)
 
   const breakdown = {
     accuracyPoints,
@@ -80,13 +83,13 @@ export default function calculateScore(config, result, allRuns = [], missionConf
     if (!previousBadges.includes(badgeKey)) newBadges.push(badgeKey)
   }
 
-  addBadge('goldilocks', config.lr >= 0.0008 && config.lr <= 0.003 && finalAccuracy > 0.82)
+  addBadge('goldilocks', config.lr >= 0.0008 && config.lr <= 0.003 && safeFinalAccuracy > 0.82)
   addBadge('exploder', diverged)
   addBadge('flatliner', vanished || flatlined)
   addBadge('speedrunner', firstConvergedEpoch !== -1 && firstConvergedEpoch < 10)
   addBadge('scientist', countUnique(runsIncludingCurrent, (run) => run.config?.optimizer) >= 3)
-  addBadge('comeback', finalAccuracy > 0.8 && previousBestAccuracy < 0.35)
-  addBadge('eagle_eye', config.filterSize === 3 && allRuns.length === 0 && finalAccuracy > 0.8)
+  addBadge('comeback', safeFinalAccuracy > 0.8 && previousBestAccuracy < 0.35)
+  addBadge('eagle_eye', config.filterSize === 3 && allRuns.length === 0 && safeFinalAccuracy > 0.8)
   addBadge('smooth_op',
     trainLoss.length >= 20 &&
     (() => {
@@ -96,11 +99,11 @@ export default function calculateScore(config, result, allRuns = [], missionConf
       return Math.sqrt(variance) < 0.05
     })(),
   )
-  addBadge('deep_diver', config.convLayers >= 10 && finalAccuracy > 0.7)
+  addBadge('deep_diver', config.convLayers >= 10 && safeFinalAccuracy > 0.7)
   addBadge('methodical', runCount >= 4 && countUnique(runsIncludingCurrent, (run) => run.config?.batchSize) >= 3)
-  addBadge('first_blood', runCount === 1 && finalAccuracy > 0.8)
-  addBadge('no_hints', !diverged && !vanished && !flatlined && finalAccuracy > 0.85)
-  addBadge('perfectionist', finalAccuracy > 0.92 && gap < 0.04)
+  addBadge('first_blood', runCount === 1 && safeFinalAccuracy > 0.8)
+  addBadge('no_hints', !diverged && !vanished && !flatlined && safeFinalAccuracy > 0.85)
+  addBadge('perfectionist', safeFinalAccuracy > 0.92 && gap < 0.04)
   addBadge('marathon', runCount >= 8)
 
   return {

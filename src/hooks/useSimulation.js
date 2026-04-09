@@ -1,7 +1,8 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import { lookupCurve, preloadMission } from '../engine/curveLookup.js'
+import simulate from '../engine/simulate.js'
 import generateDiagnostics, { generateInsight } from '../engine/diagnostics.js'
 import calculateScore from '../engine/scoring.js'
+import { normalizeAccuracy, normalizeScore, normalizeSeries } from '../utils/metricsNormalization.js'
 
 export function useSimulation() {
 	const [allRuns, setAllRuns] = useState([])
@@ -26,16 +27,14 @@ export function useSimulation() {
 		}
 	}, [])
 
-	// Preload the current mission's JSON data as soon as the hook mounts.
-	// This fires once per mission so the first Run press has no latency.
+	// Compatibility no-op: runtime now uses only the procedural engine.
 	const preloadForMission = useCallback((missionId) => {
-		if (missionId) preloadMission(missionId)
+		void missionId
 	}, [])
 
 	const runSimulation = useCallback(
 		async (config, missionConfig) => {
-			// Fetch real pre-computed curve (falls back to parametric if needed)
-			const result = await lookupCurve(config, missionConfig)
+			const result = simulate(config, missionConfig)
 
 			setIsAnimating(true)
 			setCurrentEpoch(0)
@@ -124,8 +123,8 @@ export function useSimulation() {
 			const result = {
 				trainLoss: row.train_loss || [],
 				valLoss: row.val_loss || [],
-				accuracy: row.accuracy || [],
-				finalAccuracy: row.final_accuracy || 0,
+				accuracy: normalizeSeries(row.accuracy || []),
+				finalAccuracy: normalizeAccuracy(row.final_accuracy || 0),
 				finalTrainLoss: row.final_train_loss || 0,
 				finalValLoss: row.final_val_loss || 0,
 				diverged: row.diverged || false,
@@ -141,7 +140,7 @@ export function useSimulation() {
 				runNumber: row.run_number,
 				config: row.config,
 				result,
-				score: row.score ?? nextScore.total,
+				score: normalizeScore(row.score ?? nextScore.total),
 				breakdown: nextScore.breakdown,
 				badges: nextScore.badges,
 				newBadges: nextScore.newBadges,

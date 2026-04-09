@@ -2,6 +2,7 @@ import { useEffect, useState, useRef, useMemo, useCallback } from 'react'
 import { supabase } from '../lib/supabase.js'
 import { getMission } from '../missions/index.js'
 import { getMissionIdForLabSessionCode } from '../config/labSessions.js'
+import { normalizeAccuracy, normalizeScore } from '../utils/metricsNormalization.js'
 
 export function useFeed(sessionCode) {
   const [teams, setTeams] = useState([])
@@ -237,7 +238,14 @@ export function useFeed(sessionCode) {
     const result = {}
     for (const team of canonicalTeams) {
       const teamRuns = runs.filter((run) => run.team_id === team.id)
-      result[team.id] = teamRuns.sort((a, b) => (b.final_accuracy || 0) - (a.final_accuracy || 0))[0] || null
+      const best = teamRuns.sort((a, b) => normalizeAccuracy(b.final_accuracy || 0) - normalizeAccuracy(a.final_accuracy || 0))[0] || null
+      result[team.id] = best
+        ? {
+            ...best,
+            final_accuracy: normalizeAccuracy(best.final_accuracy || 0),
+            score: normalizeScore(best.score || 0),
+          }
+        : null
     }
     return result
   }, [canonicalTeams, runs])
@@ -250,9 +258,9 @@ export function useFeed(sessionCode) {
         id: team.id,
         name: team.session_code || team.team_name,
         color: team.color,
-        accuracy: bestRun?.final_accuracy || 0,
+        accuracy: normalizeAccuracy(bestRun?.final_accuracy || 0),
         val_loss: bestRun?.final_val_loss,
-        score: bestRun?.score || 0,
+        score: normalizeScore(bestRun?.score || 0),
         optimizer: bestRun?.config?.optimizer,
         activation: bestRun?.config?.activation,
         run_number: bestRun?.run_number || team.run_count || 0,

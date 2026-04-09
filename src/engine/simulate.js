@@ -65,12 +65,87 @@ function schedulerMultiplier(scheduler, progress, plateauTriggered) {
   return 1
 }
 
+function applyMissionDifficulty(params, config, missionConfig = {}) {
+  const missionId = missionConfig.id || null
+
+  // Global difficulty bump so convergence requires cleaner configs.
+  params.Lfloor *= 1.06
+  params.decay *= 0.92
+  params.noiseScale *= 1.1
+
+  if (config.batchSize <= 8) {
+    params.noiseScale *= 1.2
+  }
+
+  if (!missionId) return params
+
+  if (missionId === 'exploder') {
+    if (config.optimizer === 'sgd' && config.batchSize < 32) {
+      params.noiseScale *= 1.35
+      params.Lfloor = Math.max(params.Lfloor, 0.62)
+    }
+    if (config.lr >= 0.5) {
+      params.explode = true
+      params.explodeEpoch = Math.min(params.explodeEpoch, 4)
+    }
+  }
+
+  if (missionId === 'flatliner') {
+    if (!['he', 'xavier'].includes(config.init)) {
+      params.flatline = params.flatline || config.init === 'zeros'
+      params.decay *= 0.75
+      params.Lfloor = Math.max(params.Lfloor, 0.95)
+    }
+    if (!['relu', 'leaky', 'elu'].includes(config.activation)) {
+      params.vanishing = true
+      params.Lfloor = Math.max(params.Lfloor, 1.05)
+      params.decay *= 0.65
+    }
+  }
+
+  if (missionId === 'memorizer') {
+    if ((config.layers >= 4 || config.width >= 128) && config.dropout < 0.2) {
+      params.overfit = true
+      params.overfitEpoch = Math.min(params.overfitEpoch, 9)
+      params.Lfloor *= 1.08
+    }
+    if (config.regularization === 'none') {
+      params.noiseScale *= 1.15
+    }
+  }
+
+  if (missionId === 'slowlearner') {
+    if (config.scheduler === 'none') {
+      params.decay *= 0.72
+      params.Lfloor = Math.max(params.Lfloor, 0.34)
+    }
+    if (config.optimizer === 'sgd' && config.lr < 0.01) {
+      params.decay *= 0.7
+      params.Lfloor = Math.max(params.Lfloor, 0.4)
+    }
+  }
+
+  if (missionId === 'symmetrybreaker') {
+    if (config.batchSize < 32 && config.dropout < 0.2) {
+      params.overfit = true
+      params.overfitEpoch = Math.min(params.overfitEpoch, 10)
+      params.noiseScale *= 1.1
+    }
+    if (config.regularization === 'none') {
+      params.Lfloor *= 1.05
+    }
+  }
+
+  return params
+}
+
 export default function simulate(config, missionConfig = {}) {
   const configStr = JSON.stringify({ config, missionId: missionConfig.id || null })
   const rng = mulberry32(simpleHash(configStr))
 
   let params = resolveParams(config, rng)
   params = applyInteractions(params, config)
+  params = applyMissionDifficulty(params, config, missionConfig)
 
   const missionProfile = getMissionProfile(missionConfig)
   const epochs = Math.max(1, config.epochs || missionConfig.defaultConfig?.epochs || 30)
@@ -146,7 +221,7 @@ export default function simulate(config, missionConfig = {}) {
           ? (epoch - params.overfitEpoch) * (0.0045 + rng() * 0.001)
           : 0
 
-      const missionGapMultiplier = missionConfig.id === 'memorizer' ? 1.35 : 1
+      const missionGapMultiplier = missionConfig.id === 'memorizer' ? 1.5 : missionConfig.id === 'symmetrybreaker' ? 1.2 : 1
       vLoss = tLoss + overfitDelta * missionGapMultiplier + 0.008 + rng() * 0.01
 
       if (!rescueTriggered && config.scheduler === 'plateau' && epoch >= 5) {
